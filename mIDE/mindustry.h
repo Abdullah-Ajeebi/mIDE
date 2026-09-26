@@ -1,0 +1,54 @@
+// --- Mindustry Standard Library Header (mindustry.h) ---
+#pragma once
+typedef double block;
+typedef double unit;
+typedef double item;
+typedef double INT_PTR; // as requested
+
+void ubind(double type);
+double ulocate(double locate, double flag, double enemy, double ore, double outY, double outFound, double outBuild);
+void ucontrol(double type, double p1, double p2, double p3, double p4, double p5);
+void control(double type, double target, double p1, double p2, double p3, double p4);
+double getlink(double index);
+double read(double target, double position);
+void write(double target, double position, double value);
+double sensor(double from, double type);
+double radar(double target1, double target2, double target3, double sort, double radar, double sortOrder);
+double select(double op, double comp0, double comp1, double a, double b);
+void end();
+void draw(double type, double x, double y, double p1, double p2, double p3, double p4);
+void drawflush(double target);
+void print(double value);
+void printchar(double value);
+void format(double value);
+void printflush(double target);
+void setrate(double amount);
+void wait(double value);
+void stop();
+double lookup(double from, double type);
+double packcolor(double r, double g, double b, double a);
+void unpackcolor(double r, double g, double b, double a, double value);
+void cutscene(double action, double p1, double p2, double p3, double p4);
+double fetch(double type, double team, double extra, double index);
+void query(double shape, double type, double team, double x, double y, double width, double height);
+double getblock(double x, double y, double layer);
+void setblock(double x, double y, double block, double team, double rotation, double layer);
+double spawnunit(double type, double x, double y, double rotation, double team, double effect);
+double spawnbullet(double from, double index, double x, double y, double rotation, double team, double owner, double damage, double velocityScl, double lifeScl, double aimX, double aimY);
+void setweather(double type, double state);
+void applyeffect(double clear, double effect, double unit, double duration);
+void setrule(double rule, double value, double p1, double p2, double p3, double p4);
+void flushmessage(double type, double duration, double outSuccess);
+void effect(double type, double x, double y, double rotation, double color, double data);
+void explosion(double team, double x, double y, double radius, double damage, double air, double ground, double pierce, double effect);
+void sync(double variable);
+void clientdata(double channel, double value, double reliable);
+double getflag(double flag);
+void setflag(double flag, double value);
+void spawnwave();
+void setprop(double type, double of, double value);
+void playsound();
+void playmusic();
+void setmarker(double type, double id, double p1, double p2, double p3);
+void makemarker(double type, double id, double x, double y, double replace);
+void localeprint(double name);

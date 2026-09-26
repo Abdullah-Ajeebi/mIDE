@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="mIDE/mIDE.vcxproj" Id="805468ea-64ab-4ea7-9660-622096dd5fd8" />
+</Solution>

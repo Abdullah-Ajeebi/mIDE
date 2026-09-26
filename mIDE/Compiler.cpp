@@ -9,7 +9,7 @@
 
 namespace
 {
-	enum class TokenKind { End, Identifier, Number, String, Int, Return, Plus, Minus, Star, Slash, Assign, Semicolon, Comma, LParen, RParen, LBrace, RBrace };
+	enum class TokenKind { End, Identifier, Number, String, Int, Return, Plus, Minus, Star, Slash, Assign, Semicolon, Comma, LParen, RParen, LBrace, RBrace, Less, LessEqual, Greater, GreaterEqual, Equal, NotEqual };
 
 	struct Token
 	{
@@ -199,7 +199,46 @@ namespace
 			{
 			case L'+': kind = TokenKind::Plus; break; case L'-': kind = TokenKind::Minus; break;
 			case L'*': kind = TokenKind::Star; break; case L'/': kind = TokenKind::Slash; break;
-			case L'=': kind = TokenKind::Assign; break; case L';': kind = TokenKind::Semicolon; break;
+			case L';': kind = TokenKind::Semicolon; break;
+			case L'<':
+				if (position_ < source_.size() && source_[position_] == L'=') {
+					++position_;
+					current_ = { TokenKind::LessEqual, L"<=", line_ };
+				}
+				else {
+					current_ = { TokenKind::Less, L"<", line_ };
+				}
+				return;
+
+			case L'>':
+				if (position_ < source_.size() && source_[position_] == L'=') {
+					++position_;
+					current_ = { TokenKind::GreaterEqual, L">=", line_ };
+				}
+				else {
+					current_ = { TokenKind::Greater, L">", line_ };
+				}
+				return;
+
+			case L'=':
+				if (position_ < source_.size() && source_[position_] == L'=') {
+					++position_;
+					current_ = { TokenKind::Equal, L"==", line_ };
+				}
+				else {
+					current_ = { TokenKind::Assign, L"=", line_ };
+				}
+				return;
+
+			case L'!':
+				if (position_ < source_.size() && source_[position_] == L'=') {
+					++position_;
+					current_ = { TokenKind::NotEqual, L"!=", line_ };
+				}
+				else {
+					Fail(L"unexpected '!'");
+				}
+				return;
 			case L',': kind = TokenKind::Comma; break;
 			case L'(': kind = TokenKind::LParen; break; case L')': kind = TokenKind::RParen; break;
 			case L'{': kind = TokenKind::LBrace; break; case L'}': kind = TokenKind::RBrace; break;
@@ -382,7 +421,7 @@ namespace
 			return result;
 		}
 
-		std::wstring ParseExpression()
+		std::wstring ParseAdditive()
 		{
 			std::wstring left = ParseTerm();
 			while (current_.kind == TokenKind::Plus || current_.kind == TokenKind::Minus)
@@ -425,6 +464,37 @@ namespace
 				Emit(L"op " + std::wstring(op == TokenKind::Star ? L"mul" : L"idiv") + L" " + temp + L" " + left + L" " + right);
 				left = temp;
 			}
+			return left;
+		}
+
+		std::wstring ParseExpression()
+		{
+			std::wstring left = ParseAdditive();
+
+			while (current_.kind == TokenKind::Less || current_.kind == TokenKind::LessEqual ||
+				current_.kind == TokenKind::Greater || current_.kind == TokenKind::GreaterEqual ||
+				current_.kind == TokenKind::Equal || current_.kind == TokenKind::NotEqual)
+			{
+				TokenKind op = current_.kind;
+				Next();
+				std::wstring right = ParseAdditive();
+
+				std::wstring mlogOp;
+				switch (op) {
+				case TokenKind::Less:         mlogOp = L"lessThan"; break;
+				case TokenKind::LessEqual:    mlogOp = L"lessThanEq"; break;
+				case TokenKind::Greater:      mlogOp = L"greaterThan"; break;
+				case TokenKind::GreaterEqual: mlogOp = L"greaterThanEq"; break;
+				case TokenKind::Equal:        mlogOp = L"equal"; break;
+				case TokenKind::NotEqual:     mlogOp = L"notEqual"; break;
+				default: break;
+				}
+
+				std::wstring temp = NewTemporary();
+				Emit(L"op " + mlogOp + L" " + temp + L" " + left + L" " + right);
+				left = temp;
+			}
+
 			return left;
 		}
 

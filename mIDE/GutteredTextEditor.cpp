@@ -603,30 +603,31 @@ private:
 
             if (ch == L'(')
             {
-                // 1. Get Caret position
                 CHARRANGE cr = {};
                 SendMessageW(hWnd, EM_EXGETSEL, 0, (LPARAM)&cr);
                 int pos = cr.cpMax;
 
-                // 2. Scan backwards from '(' to find the function name
-                int totalLen = GetWindowTextLengthW(hWnd);
-                std::vector<wchar_t> buf(totalLen + 1, 0);
-                GetWindowTextW(hWnd, buf.data(), totalLen + 1);
+                int startPos = max(0, pos - 64);
+                std::vector<wchar_t> textBuf(pos - startPos + 1, 0);
+                TEXTRANGEW tr = { { startPos, pos }, textBuf.data() };
+                SendMessageW(hWnd, EM_GETTEXTRANGE, 0, (LPARAM)&tr);
 
-                int end = pos;
-                while (end > 0 && iswspace(buf[end - 1])) end--;
+                int end = (int)wcslen(textBuf.data());
+                while (end > 0 && iswspace(textBuf[end - 1])) end--;
                 int start = end;
-                while (start > 0 && (iswalnum(buf[start - 1]) || buf[start - 1] == L'_')) start--;
+                while (start > 0 && (iswalnum(textBuf[start - 1]) || textBuf[start - 1] == L'_')) start--;
 
                 if (end > start)
                 {
-                    std::wstring funcName(&buf[start], end - start);
+                    std::wstring funcName(&textBuf[start], end - start);
 
                     auto it = g_CallTipSignatures.find(funcName);
-                    if (it != g_CallTipSignatures.end()) {
+                    if (it != g_CallTipSignatures.end())
+                    {
                         self->ShowCallTip(it->second);
                     }
-                    else if (self->knownFunctions_.count(funcName)) {
+                    else if (self->knownFunctions_.count(funcName))
+                    {
                         self->ShowCallTip(funcName + L"(...)");
                     }
                 }

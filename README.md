@@ -21,11 +21,21 @@ mIDE is a Windows desktop IDE for writing C-like source code and compiling it in
 
 ## Building
 
+### From source
+
 mIDE is a Windows desktop application and is built using Win32 APIs and Visual Studio project files.
 
 1. Open `mIDE.slnx` in Visual Studio 2022, or open `mIDE/mIDE.vcxproj` directly.
 2. Restore/build the solution in Debug or Release mode.
 3. Run the generated `mIDE.exe`.
+
+### Quick download
+
+For users who want a ready-to-run executable without building from source, nightly builds are available at:
+
+https://nightly.link/Abdullah-Ajeebi/mIDE/workflows/msbuild/main
+
+Download the latest artifact and extract `mIDE.exe` to run directly.
 
 ## Usage
 

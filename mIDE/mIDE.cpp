@@ -12,9 +12,12 @@
 #include <vssym32.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <shlobj.h>
 #include <string>
+#include <fstream>
 
 #pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "shell32.lib")
 
 #define MAX_LOADSTRING 100
 
@@ -33,7 +36,7 @@ public:
         WSACleanup();
     }
 
-    bool connectToServer(const char* ip, const char* port) {
+    bool connectToServer(const char* ip, const char* port, DWORD timeoutMs = 2000) {
         if (connectSocket != INVALID_SOCKET) return true;
 
         struct addrinfo hints = { 0 }, * result = NULL;
@@ -45,7 +48,6 @@ public:
 
         connectSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
 
-        DWORD timeoutMs = 2000;
         setsockopt(connectSocket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeoutMs, sizeof(timeoutMs));
         setsockopt(connectSocket, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeoutMs, sizeof(timeoutMs));
 
@@ -111,6 +113,17 @@ std::wstring s2ws(const std::string& str) {
     return wstrTo;
 }
 
+std::string ws2s(const std::wstring& str) {
+    if (str.empty()) return std::string();
+    int sizeNeeded = WideCharToMultiByte(
+        CP_UTF8, 0, str.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    std::string result(sizeNeeded, '\0');
+    WideCharToMultiByte(
+        CP_UTF8, 0, str.c_str(), -1, result.data(), sizeNeeded, nullptr, nullptr);
+    result.resize(sizeNeeded > 0 ? sizeNeeded - 1 : 0);
+    return result;
+}
+
 constexpr int LEFTEXTENDWIDTH = 8;
 constexpr int TOPEXTENDWIDTH = 30;
 constexpr int RIGHTEXTENDWIDTH = 8;
@@ -129,11 +142,78 @@ static bool g_draggingSplitter = false;
 constexpr int SPLITTER_WIDTH = 6;
 MideDebuggerClient* g_debuggerClient = nullptr;
 
+// Persisted application settings stored per-user under %APPDATA%\mIDE.
+struct AppSettings {
+    std::wstring host = L"127.0.0.1";
+    int port = 9999;
+    int timeoutMs = 2000;
+    int speedIndex = 0; // placeholder
+    bool optimizerEnabled = true;
+    bool linterEnabled = true;
+    bool linterWarnings = true;
+    int cmixProfile = 0;
+    int cmixBlockSize = 64;
+};
+static AppSettings g_settings;
+
+static std::wstring SettingsFilePath()
+{
+    wchar_t appDataPath[MAX_PATH] = {};
+    if (FAILED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, appDataPath)))
+        return {};
+
+    std::wstring directory = std::wstring(appDataPath) + L"\\mIDE";
+    if (!CreateDirectoryW(directory.c_str(), nullptr) && GetLastError() != ERROR_ALREADY_EXISTS)
+        return {};
+
+    return directory + L"\\settings.txt";
+}
+
+static void SaveSettingsToFile()
+{
+    const std::wstring path = SettingsFilePath();
+    if (path.empty())
+        return;
+
+    std::wofstream f(path);
+    if (!f) return;
+    f << g_settings.host << L"\n" << g_settings.port << L"\n" << g_settings.timeoutMs << L"\n"
+      << g_settings.speedIndex << L"\n" << g_settings.optimizerEnabled << L"\n"
+      << g_settings.linterEnabled << L"\n" << g_settings.linterWarnings << L"\n"
+      << g_settings.cmixProfile << L"\n" << g_settings.cmixBlockSize << L"\n";
+}
+
+static void LoadSettingsFromFile()
+{
+    const std::wstring path = SettingsFilePath();
+    if (path.empty())
+        return;
+
+    std::wifstream f(path);
+    if (!f) return;
+    std::wstring host; int port; int timeout; int speed;
+    if (!(f >> host)) return;
+    if (!(f >> port)) return;
+    if (!(f >> timeout)) return;
+    if (!(f >> speed)) return;
+    g_settings.host = host;
+    g_settings.port = port;
+    g_settings.timeoutMs = timeout;
+    g_settings.speedIndex = speed;
+    f >> g_settings.optimizerEnabled >> g_settings.linterEnabled
+      >> g_settings.linterWarnings >> g_settings.cmixProfile
+      >> g_settings.cmixBlockSize;
+}
+
+// Message used to receive test-connect result posted from worker thread
+#define WM_TESTCONNECT_RESULT (WM_APP + 50)
+
 ATOM                MyRegisterClass(HINSTANCE hInstance);
 BOOL                InitInstance(HINSTANCE, int);
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    Trollge(HWND, UINT, WPARAM, LPARAM);
+INT_PTR CALLBACK    SettingsDlgProc(HWND, UINT, WPARAM, LPARAM);
 void                ResizeEditorPanes(HWND hWnd, int width, int height);
 
 LRESULT CALLBACK SplitterProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -398,7 +478,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
     INITCOMMONCONTROLSEX commonControls = {};
     commonControls.dwSize = sizeof(commonControls);
-    commonControls.dwICC = ICC_STANDARD_CLASSES | ICC_BAR_CLASSES;
+    commonControls.dwICC = ICC_STANDARD_CLASSES | ICC_BAR_CLASSES | ICC_TAB_CLASSES;
     if (!InitCommonControlsEx(&commonControls))
         return FALSE;
 
@@ -469,6 +549,7 @@ void ResizeEditorPanes(HWND hWnd, int width, int height)
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
     hInst = hInstance;
+    LoadSettingsFromFile();
 
     editor = new GutteredTextEditor();
     compiledEditor = new GutteredTextEditor();
@@ -558,6 +639,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             MessageBox(hWnd, L"Failed to create editor panes", L"Error", MB_OK | MB_ICONERROR);
             return -1;
         }
+        editor->SetLintEnabled(g_settings.linterEnabled);
         compiledEditor->SetLintEnabled(false);
         compiledEditor->SetReadOnly(true);
         compiledEditor->SetText(L"Compiled mlog will appear here.");
@@ -596,8 +678,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             std::wstring sourceCode = editor->GetText();
             compiledEditor->SetText(L"Compiling and optimizing in background...\r\n");
 
-            std::thread([hWnd, sourceCode]() {
-                CompileResult result = CompileCToMlog(sourceCode);
+                const bool optimizerEnabled = g_settings.optimizerEnabled;
+                std::thread([hWnd, sourceCode, optimizerEnabled]() {
+                    CompileResult result = CompileCToMlog(sourceCode, optimizerEnabled);
                 auto* pResult = new CompileResult(result);
                 PostMessageW(hWnd, WM_APP_COMPILE_DONE, reinterpret_cast<WPARAM>(pResult), 0);
                 }).detach();
@@ -607,10 +690,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         {
             compiledEditor->SetText(L"Connecting to Mindustry daemon in background...\r\n");
 
-            std::thread([hWnd]() {
+            const std::string host = ws2s(g_settings.host);
+            const std::string port = std::to_string(g_settings.port);
+            const DWORD timeoutMs = static_cast<DWORD>(max(1, g_settings.timeoutMs));
+
+            std::thread([hWnd, host, port, timeoutMs]() {
                 MideDebuggerClient client;
 
-                if (client.connectToServer("127.0.0.1", "9999")) {
+                if (client.connectToServer(host.c_str(), port.c_str(), timeoutMs)) {
                     std::string output = "CONNECTED!\r\n======================\r\n";
                     output += "PROCESSORS:\r\n" + client.sendCommand("LIST_PROCESSORS") + "\r\n";
 
@@ -624,10 +711,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                     PostMessageW(hWnd, WM_APP_DEBUG_DONE, reinterpret_cast<WPARAM>(pResult), 0);
                 }
                 else {
-                    auto* pResult = new std::wstring(L"[Connection Error]\r\nMindustry is not running or port 9999 is blocked.");
+                    auto* pResult = new std::wstring(
+                        std::wstring(L"[Connection Error]\r\nMindustry is not running or port ") +
+                        s2ws(port) + L" is blocked.");
                     PostMessageW(hWnd, WM_APP_DEBUG_DONE, reinterpret_cast<WPARAM>(pResult), 0);
                 }
                 }).detach();
+            break;
+        }
+        case IDM_SETTINGS:
+        {
+            DialogBoxParamW(hInst, MAKEINTRESOURCEW(IDD_SETTINGS), hWnd, (DLGPROC)SettingsDlgProc, 0);
             break;
         }
         case IDM_ABOUT:
@@ -719,40 +813,265 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     return 0;
 }
 
-INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
+INT_PTR CALLBACK SettingsNetworkPageProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
-    UNREFERENCED_PARAMETER(lParam);
     switch (message)
     {
     case WM_INITDIALOG:
-        return (INT_PTR)TRUE;
+        SetDlgItemTextW(hDlg, IDC_HOST, g_settings.host.c_str());
+        SetDlgItemInt(hDlg, IDC_PORT, g_settings.port, FALSE);
+        SetDlgItemInt(hDlg, IDC_TIMEOUT, g_settings.timeoutMs, FALSE);
+        SendDlgItemMessageW(hDlg, IDC_SPEED, CB_ADDSTRING, 0, (LPARAM)L"Normal");
+        SendDlgItemMessageW(hDlg, IDC_SPEED, CB_ADDSTRING, 0, (LPARAM)L"Slow");
+        SendDlgItemMessageW(hDlg, IDC_SPEED, CB_ADDSTRING, 0, (LPARAM)L"Very slow");
+        SendDlgItemMessageW(hDlg, IDC_SPEED, CB_SETCURSEL, g_settings.speedIndex, 0);
+        return TRUE;
 
     case WM_COMMAND:
-        if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL)
+        if (LOWORD(wParam) == IDC_TEST_CONNECT)
         {
-            EndDialog(hDlg, LOWORD(wParam));
-            return (INT_PTR)TRUE;
+            wchar_t hostBuf[256] = {};
+            wchar_t portBuf[32] = {};
+            GetDlgItemTextW(hDlg, IDC_HOST, hostBuf, _countof(hostBuf));
+            GetDlgItemTextW(hDlg, IDC_PORT, portBuf, _countof(portBuf));
+            EnableWindow(GetDlgItem(hDlg, IDC_TEST_CONNECT), FALSE);
+
+            std::wstring hostStr = hostBuf;
+            int sizeNeeded = WideCharToMultiByte(
+                CP_UTF8, 0, hostStr.c_str(), -1, nullptr, 0, nullptr, nullptr);
+            std::string hostUtf8(sizeNeeded, '\0');
+            WideCharToMultiByte(
+                CP_UTF8, 0, hostStr.c_str(), -1, hostUtf8.data(), sizeNeeded, nullptr, nullptr);
+            std::string portStr = std::to_string(_wtoi(portBuf));
+            wchar_t timeoutBuf[32] = {};
+            GetDlgItemTextW(hDlg, IDC_TIMEOUT, timeoutBuf, _countof(timeoutBuf));
+            DWORD timeoutMs = static_cast<DWORD>(max(1, _wtoi(timeoutBuf)));
+
+            std::thread([hDlg, hostUtf8, portStr, timeoutMs]() {
+                MideDebuggerClient client;
+                bool ok = client.connectToServer(hostUtf8.c_str(), portStr.c_str(), timeoutMs);
+                PostMessageW(hDlg, WM_TESTCONNECT_RESULT, ok ? 1 : 0, 0);
+            }).detach();
+            return TRUE;
+        }
+        break;
+
+    case WM_TESTCONNECT_RESULT:
+        EnableWindow(GetDlgItem(hDlg, IDC_TEST_CONNECT), TRUE);
+        MessageBoxW(
+            hDlg,
+            wParam ? L"Connection OK" : L"Connection failed",
+            L"Test connection",
+            wParam ? MB_OK : MB_OK | MB_ICONERROR);
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+INT_PTR CALLBACK SettingsCompilerPageProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    if (message == WM_INITDIALOG)
+    {
+        CheckDlgButton(hDlg, IDC_COMPILER_OPTIMIZE,
+            g_settings.optimizerEnabled ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hDlg, IDC_LINTER_ENABLE,
+            g_settings.linterEnabled ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hDlg, IDC_LINTER_WARNINGS,
+            g_settings.linterWarnings ? BST_CHECKED : BST_UNCHECKED);
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+INT_PTR CALLBACK SettingsCmixPageProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    switch (message)
+    {
+    case WM_INITDIALOG:
+        SendDlgItemMessageW(hDlg, IDC_CMIX_PROFILE, CB_ADDSTRING, 0, (LPARAM)L"Balanced");
+        SendDlgItemMessageW(hDlg, IDC_CMIX_PROFILE, CB_ADDSTRING, 0, (LPARAM)L"Maximum compression");
+        SendDlgItemMessageW(hDlg, IDC_CMIX_PROFILE, CB_ADDSTRING, 0, (LPARAM)L"Fast");
+        SendDlgItemMessageW(hDlg, IDC_CMIX_PROFILE, CB_SETCURSEL, g_settings.cmixProfile, 0);
+        SetDlgItemInt(hDlg, IDC_CMIX_BLOCK_SIZE, g_settings.cmixBlockSize, FALSE);
+        return TRUE;
+
+    case WM_COMMAND:
+        if (LOWORD(wParam) == IDC_CMIX_TEST)
+        {
+            DialogBoxW(hInst, MAKEINTRESOURCEW(IDD_CMIX), hDlg, Trollge);
+            return TRUE;
         }
         break;
     }
-    return (INT_PTR)FALSE;
+
+    return FALSE;
+}
+
+struct SettingsDialogState
+{
+    HWND tabs = nullptr;
+    HWND pages[3] = {};
+};
+
+static void LayoutSettingsPages(HWND hDlg, SettingsDialogState* state)
+{
+    RECT pageRect = {};
+    GetWindowRect(state->tabs, &pageRect);
+    MapWindowPoints(nullptr, hDlg, reinterpret_cast<POINT*>(&pageRect), 2);
+    TabCtrl_AdjustRect(state->tabs, FALSE, &pageRect);
+
+    for (HWND page : state->pages)
+        MoveWindow(page, pageRect.left, pageRect.top,
+            pageRect.right - pageRect.left, pageRect.bottom - pageRect.top, TRUE);
+}
+
+static void SelectSettingsPage(SettingsDialogState* state, int selected)
+{
+    for (int index = 0; index < 3; ++index)
+        ShowWindow(state->pages[index], index == selected ? SW_SHOW : SW_HIDE);
+}
+
+INT_PTR CALLBACK SettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    auto* state = reinterpret_cast<SettingsDialogState*>(
+        GetWindowLongPtrW(hDlg, DWLP_USER));
+
+    switch (message)
+    {
+    case WM_INITDIALOG:
+    {
+        auto* newState = new SettingsDialogState();
+        SetWindowLongPtrW(hDlg, DWLP_USER, reinterpret_cast<LONG_PTR>(newState));
+        newState->tabs = GetDlgItem(hDlg, IDC_SETTINGSTABBER);
+
+        TCITEMW item = {};
+        item.mask = TCIF_TEXT;
+        wchar_t labels[][32] = { L"Connection", L"Compiler / Linter", L"CMIX" };
+        for (wchar_t* label : labels)
+        {
+            item.pszText = label;
+            TabCtrl_InsertItem(newState->tabs, TabCtrl_GetItemCount(newState->tabs), &item);
+        }
+
+        newState->pages[0] = CreateDialogW(
+            hInst, MAKEINTRESOURCEW(IDD_SETTINGS_NETWORK), hDlg,
+            SettingsNetworkPageProc);
+        newState->pages[1] = CreateDialogW(
+            hInst, MAKEINTRESOURCEW(IDD_SETTINGS_COMPILER), hDlg,
+            SettingsCompilerPageProc);
+        newState->pages[2] = CreateDialogW(
+            hInst, MAKEINTRESOURCEW(IDD_SETTINGS_CMIX), hDlg,
+            SettingsCmixPageProc);
+
+        if (!newState->pages[0] || !newState->pages[1] || !newState->pages[2])
+        {
+            EndDialog(hDlg, IDCANCEL);
+            return TRUE;
+        }
+
+        LayoutSettingsPages(hDlg, newState);
+        TabCtrl_SetCurSel(newState->tabs, 0);
+        SelectSettingsPage(newState, 0);
+        return TRUE;
+    }
+
+    case WM_NOTIFY:
+    {
+        auto* header = reinterpret_cast<NMHDR*>(lParam);
+        if (state && header->idFrom == IDC_SETTINGSTABBER &&
+            header->code == TCN_SELCHANGE)
+        {
+            SelectSettingsPage(state, TabCtrl_GetCurSel(state->tabs));
+            return TRUE;
+        }
+        break;
+    }
+
+    case WM_COMMAND:
+        if (LOWORD(wParam) == IDOK && state)
+        {
+            wchar_t buffer[256] = {};
+            GetDlgItemTextW(state->pages[0], IDC_HOST, buffer, _countof(buffer));
+            g_settings.host = buffer;
+            GetDlgItemTextW(state->pages[0], IDC_PORT, buffer, _countof(buffer));
+            g_settings.port = _wtoi(buffer);
+            GetDlgItemTextW(state->pages[0], IDC_TIMEOUT, buffer, _countof(buffer));
+            g_settings.timeoutMs = _wtoi(buffer);
+            g_settings.speedIndex = static_cast<int>(
+                SendDlgItemMessageW(state->pages[0], IDC_SPEED, CB_GETCURSEL, 0, 0));
+            g_settings.optimizerEnabled =
+                IsDlgButtonChecked(state->pages[1], IDC_COMPILER_OPTIMIZE) == BST_CHECKED;
+            g_settings.linterEnabled =
+                IsDlgButtonChecked(state->pages[1], IDC_LINTER_ENABLE) == BST_CHECKED;
+            g_settings.linterWarnings =
+                IsDlgButtonChecked(state->pages[1], IDC_LINTER_WARNINGS) == BST_CHECKED;
+            g_settings.cmixProfile = static_cast<int>(
+                SendDlgItemMessageW(state->pages[2], IDC_CMIX_PROFILE, CB_GETCURSEL, 0, 0));
+            g_settings.cmixBlockSize = GetDlgItemInt(
+                state->pages[2], IDC_CMIX_BLOCK_SIZE, nullptr, FALSE);
+            editor->SetLintEnabled(g_settings.linterEnabled);
+            SaveSettingsToFile();
+            EndDialog(hDlg, IDOK);
+            return TRUE;
+        }
+        if (LOWORD(wParam) == IDCANCEL)
+        {
+            EndDialog(hDlg, IDCANCEL);
+            return TRUE;
+        }
+        break;
+
+    case WM_DESTROY:
+        if (state)
+        {
+            for (HWND page : state->pages)
+                if (page) DestroyWindow(page);
+            delete state;
+            SetWindowLongPtrW(hDlg, DWLP_USER, 0);
+        }
+        return TRUE;
+    }
+
+    return FALSE;
+}
+
+// (Legacy programmatic settings window left in file for now; resource dialog used instead.)
+INT_PTR CALLBACK About(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
+{
+        UNREFERENCED_PARAMETER(lParam);
+        switch (message)
+        {
+        case WM_INITDIALOG:
+            return (INT_PTR)TRUE;
+
+        case WM_COMMAND:
+            if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL)
+            {
+                EndDialog(hDlg, LOWORD(wParam));
+                return (INT_PTR)TRUE;
+            }
+            break;
+        }
+        return (INT_PTR)FALSE;
 }
 
 INT_PTR CALLBACK Trollge(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 {
-    UNREFERENCED_PARAMETER(lParam);
-    switch (message)
-    {
-    case WM_INITDIALOG:
-        return (INT_PTR)TRUE;
-
-    case WM_COMMAND:
-        if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL)
+        UNREFERENCED_PARAMETER(lParam);
+        switch (message)
         {
-            EndDialog(hDlg, LOWORD(wParam));
+        case WM_INITDIALOG:
             return (INT_PTR)TRUE;
+
+        case WM_COMMAND:
+            if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL)
+            {
+                EndDialog(hDlg, LOWORD(wParam));
+                return (INT_PTR)TRUE;
+            }
+            break;
         }
-        break;
-    }
-    return (INT_PTR)FALSE;
+        return (INT_PTR)FALSE;
 }

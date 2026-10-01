@@ -10,4 +10,4 @@ struct CompileResult
 	int errorLine = 0;
 };
 
-CompileResult CompileCToMlog(const std::wstring& source);
+CompileResult CompileCToMlog(const std::wstring& source, bool optimize = true);

@@ -141,6 +141,27 @@ public:
     void SetLintEnabled(bool enabled)
     {
         lintEnabled_ = enabled;
+        if (!enabled)
+        {
+            if (hwnd_)
+                KillTimer(hwnd_, TIMER_LINT_ID);
+
+            latestLintHash_ = 0;
+            lastCompletedLintHash_ = 0;
+            g_errorLine = -1;
+            g_errorMessage.clear();
+
+            if (hwndPopup_)
+                ShowWindow(hwndPopup_, SW_HIDE);
+            if (hwndEdit_)
+                HighlightSyntax();
+            if (hwndGutter_)
+                InvalidateRect(hwndGutter_, nullptr, FALSE);
+        }
+        else if (hwnd_)
+        {
+            SetTimer(hwnd_, TIMER_LINT_ID, 1, nullptr);
+        }
     }
 
     void RefreshTheme()

@@ -1,6 +1,6 @@
 #include "Compiler.h"
 #include "Optimizer.h"
-#include "MindustryBuiltins.inl"
+#include "MindustryBuiltins.inl" // dynamically generated
 
 #include <cwctype>
 #include <map>
@@ -21,7 +21,7 @@ namespace
 	class Compiler
 	{
 	public:
-		explicit Compiler(const std::wstring& source) : source_(source)
+		explicit Compiler(const std::wstring& source, bool optimize) : source_(source), optimize_(optimize)
 		{
 			RegisterMindustryBuiltins(functions_);
 			Next();
@@ -53,6 +53,7 @@ namespace
 		std::map<std::wstring, bool> variables_;
 		std::map<std::wstring, std::wstring> variableNames_;
 		std::map<std::wstring, std::wstring> knownConstants_;
+		bool optimize_ = true;
 		struct Function
 		{
 			std::vector<std::wstring> parameters;
@@ -336,7 +337,7 @@ namespace
 				Expect(TokenKind::Assign, L"expected '=' after variable name");
 				std::wstring value = ParseExpression(); Expect(TokenKind::Semicolon, L"expected ';'");
 				Emit(L"set " + name + L" " + value);
-				if (IsOptimizerInteger(value))
+				if (optimize_ && IsOptimizerInteger(value))
 					knownConstants_[name] = value;
 				else
 					knownConstants_.erase(name);
@@ -367,7 +368,7 @@ namespace
 				Expect(TokenKind::Assign, L"expected '='");
 				std::wstring value = ParseExpression(); Expect(TokenKind::Semicolon, L"expected ';'");
 				Emit(L"set " + ResolveVariable(name) + L" " + value);
-				if (IsOptimizerInteger(value))
+				if (optimize_ && IsOptimizerInteger(value))
 					knownConstants_[name] = value;
 				else
 					knownConstants_.erase(name);
@@ -428,9 +429,9 @@ namespace
 			{
 				TokenKind op = current_.kind; Next();
 				std::wstring right = ParseTerm();
-				std::wstring folded = TryFoldBinary(
+				std::wstring folded = optimize_ ? TryFoldBinary(
 					op == TokenKind::Plus ? OptimizerOperator::Add : OptimizerOperator::Subtract,
-					left, right);
+					left, right) : L"";
 				if (!folded.empty())
 				{
 					left = folded;
@@ -452,9 +453,9 @@ namespace
 				std::wstring right = ParseFactor();
 				if (op == TokenKind::Slash && right == L"0")
 					Fail(L"division by zero");
-				std::wstring folded = TryFoldBinary(
+				std::wstring folded = optimize_ ? TryFoldBinary(
 					op == TokenKind::Star ? OptimizerOperator::Multiply : OptimizerOperator::Divide,
-					left, right);
+					left, right) : L"";
 				if (!folded.empty())
 				{
 					left = folded;
@@ -513,9 +514,12 @@ namespace
 							return name;
 						Fail(L"unknown variable: " + name);
 					}
-					auto constant = knownConstants_.find(name);
-					if (constant != knownConstants_.end())
-						return constant->second;
+					if (optimize_)
+					{
+						auto constant = knownConstants_.find(name);
+						if (constant != knownConstants_.end())
+							return constant->second;
+					}
 					return ResolveVariable(name);
 				}
 
@@ -539,7 +543,7 @@ namespace
 	};
 }
 
-CompileResult CompileCToMlog(const std::wstring& source)
+CompileResult CompileCToMlog(const std::wstring& source, bool optimize)
 {
-	return Compiler(source).Run();
+	return Compiler(source, optimize).Run();
 }

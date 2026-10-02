@@ -9,7 +9,7 @@
 
 namespace
 {
-	enum class TokenKind { End, Identifier, Number, String, Int, Return, Plus, Minus, Star, Slash, Assign, Semicolon, Comma, LParen, RParen, LBrace, RBrace, Less, LessEqual, Greater, GreaterEqual, Equal, NotEqual };
+	enum class TokenKind { End, Identifier, Number, String, Int, Const, Qualifier, Return, Plus, Minus, Star, Slash, Assign, Semicolon, Comma, LParen, RParen, LBrace, RBrace, Less, LessEqual, Greater, GreaterEqual, Equal, NotEqual };
 
 	struct Token
 	{
@@ -51,6 +51,7 @@ namespace
 		Token current_{ TokenKind::End, L"", 1 };
 		std::wostringstream output_;
 		std::map<std::wstring, bool> variables_;
+		std::map<std::wstring, bool> constVariables_;
 		std::map<std::wstring, std::wstring> variableNames_;
 		std::map<std::wstring, std::wstring> knownConstants_;
 		bool optimize_ = true;
@@ -59,6 +60,7 @@ namespace
 			std::vector<std::wstring> parameters;
 			bool builtin = false;
 			bool returnsValue = true;
+			std::vector<bool> constParameters;
 		};
 		std::map<std::wstring, Function> functions_;
 		size_t temporary_ = 0;
@@ -149,8 +151,19 @@ namespace
 			{
 				std::wstring text(1, c);
 				while (position_ < source_.size() && (iswalnum(source_[position_]) || source_[position_] == L'_' || source_[position_] == L'@' || source_[position_] == L'-')) text += source_[position_++];
-				if (text == L"int" || text == L"double" || text == L"float" || text == L"void" || text == L"bool")
+				if (text == L"int" || text == L"double" || text == L"float" || text == L"void" ||
+					text == L"bool" || text == L"char" || text == L"short" || text == L"long" ||
+					text == L"signed" || text == L"unsigned" || text == L"_Bool")
 					current_ = { TokenKind::Int, text, line_ };
+				else if (text == L"const")
+					current_ = { TokenKind::Const, text, line_ };
+				else if (text == L"static" || text == L"extern" || text == L"auto" ||
+					text == L"register" || text == L"inline" || text == L"restrict")
+					current_ = { TokenKind::Qualifier, text, line_ };
+				else if (text == L"true")
+					current_ = { TokenKind::Number, L"1", line_ };
+				else if (text == L"false")
+					current_ = { TokenKind::Number, L"0", line_ };
 				else if (text == L"return") current_ = { TokenKind::Return, text, line_ };
 				else current_ = { TokenKind::Identifier, text, line_ };
 				return;
@@ -286,9 +299,27 @@ namespace
 
 		std::wstring currentFunction_;
 
+		bool ParseDeclarationSpecifiers(bool& isConst)
+		{
+			bool hasType = false;
+			while (current_.kind == TokenKind::Const ||
+				current_.kind == TokenKind::Qualifier ||
+				current_.kind == TokenKind::Int)
+			{
+				if (current_.kind == TokenKind::Const)
+					isConst = true;
+				if (current_.kind == TokenKind::Int)
+					hasType = true;
+				Next();
+			}
+			return hasType;
+		}
+
 		Function ParseFunctionHeader()
 		{
-			Expect(TokenKind::Int, L"expected function return type 'int'");
+			bool ignoredConst = false;
+			if (!ParseDeclarationSpecifiers(ignoredConst))
+				Fail(L"expected function return type");
 			if (current_.kind != TokenKind::Identifier) Fail(L"expected function name");
 			currentFunction_ = current_.text;
 			Next();
@@ -299,9 +330,12 @@ namespace
 			{
 				while (true)
 				{
-					Expect(TokenKind::Int, L"expected parameter type 'int'");
+					bool ignoredParameterConst = false;
+					if (!ParseDeclarationSpecifiers(ignoredParameterConst))
+						Fail(L"expected parameter type");
 					if (current_.kind != TokenKind::Identifier) Fail(L"expected parameter name");
 					function.parameters.push_back(current_.text);
+					function.constParameters.push_back(ignoredParameterConst);
 					Next();
 					if (current_.kind != TokenKind::Comma) break;
 					Next();
@@ -317,6 +351,7 @@ namespace
 		{
 			Expect(TokenKind::LBrace, L"expected '{'");
 			variables_.clear();
+			constVariables_.clear();
 			variableNames_.clear();
 			knownConstants_.clear();
 			for (const std::wstring& parameter : function.parameters)
@@ -326,6 +361,8 @@ namespace
 				variableNames_[parameter] = L"__arg_" + currentFunction_ + L"_" +
 					std::to_wstring(variableNames_.size());
 			}
+			for (size_t i = 0; i < function.parameters.size(); ++i)
+				constVariables_[function.parameters[i]] = function.constParameters[i];
 
 			parsingMain_ = currentFunction_ == L"main";
 			Emit(L"__label __fn_" + currentFunction_);
@@ -340,12 +377,15 @@ namespace
 
 		void ParseStatement()
 		{
-			if (current_.kind == TokenKind::Int)
+			if (current_.kind == TokenKind::Int || current_.kind == TokenKind::Const ||
+				current_.kind == TokenKind::Qualifier)
 			{
-				Next();
+				bool isConst = false;
+				ParseDeclarationSpecifiers(isConst);
 				if (current_.kind != TokenKind::Identifier) Fail(L"expected variable name");
 				std::wstring name = current_.text; Next();
 				if (!variables_.insert({ name, true }).second) Fail(L"variable already declared: " + name);
+				constVariables_[name] = isConst;
 				Expect(TokenKind::Assign, L"expected '=' after variable name");
 				std::wstring value = ParseExpression(); Expect(TokenKind::Semicolon, L"expected ';'");
 				Emit(L"set " + name + L" " + value);
@@ -377,6 +417,7 @@ namespace
 					return;
 				}
 				if (!variables_.count(name)) Fail(L"unknown variable: " + name);
+				if (constVariables_[name]) Fail(L"cannot assign to const variable: " + name);
 				Expect(TokenKind::Assign, L"expected '='");
 				std::wstring value = ParseExpression(); Expect(TokenKind::Semicolon, L"expected ';'");
 				Emit(L"set " + ResolveVariable(name) + L" " + value);

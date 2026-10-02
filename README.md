@@ -11,6 +11,7 @@ mIDE is a Windows desktop IDE for writing C-like source code and compiling it in
 - Linting and warnings support
 - Debug connection to a Mindustry daemon or local server
 - Example C source for compiler stress testing
+- C-like scalar types, qualifiers, constants, and boolean literals
 
 ## Project structure
 
@@ -44,10 +45,11 @@ Download the latest artifact and extract `mIDE.exe` to run directly.
 - Review the generated output in the compiled panel.
 - Configure debugging and compiler options in the settings dialog.
 - Use `mIDE/CompilerSample.c` as a reference example for supported constructs.
+- See `PLANS.md` for supported and deferred C keywords.
 
 ## Notes
 
-This repository is focused on the Windows IDE and compiler experience, and it is primarily intended for use with Mindustry scripting workflows. The compiler targets a restricted subset of C that maps well to MLOG.
+This repository is focused on the Windows IDE and compiler experience, and it is primarily intended for use with Mindustry scripting workflows. The compiler targets a restricted subset of C that maps well to MLOG; it is not a general-purpose C compiler.
 
 ## License
 

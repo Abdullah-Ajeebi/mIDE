@@ -21,6 +21,8 @@
 
 #define MAX_LOADSTRING 100
 
+//#define STARTUPSPEED
+
 // --- TCP CLIENT CLASS ---
 class MideDebuggerClient {
     SOCKET connectSocket = INVALID_SOCKET;
@@ -141,6 +143,9 @@ static int g_splitterX = 0;
 static bool g_draggingSplitter = false;
 constexpr int SPLITTER_WIDTH = 6;
 MideDebuggerClient* g_debuggerClient = nullptr;
+#ifdef STARTUPSPEED
+LARGE_INTEGER qpcFreq, qpcStart;
+#endif
 
 // Persisted application settings stored per-user under %APPDATA%\mIDE.
 struct AppSettings {
@@ -476,6 +481,11 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
 
+#ifdef STARTUPSPEED
+    QueryPerformanceFrequency(&qpcFreq);
+    QueryPerformanceCounter(&qpcStart);
+#endif
+
     INITCOMMONCONTROLSEX commonControls = {};
     commonControls.dwSize = sizeof(commonControls);
     commonControls.dwICC = ICC_STANDARD_CLASSES | ICC_BAR_CLASSES | ICC_TAB_CLASSES;
@@ -564,6 +574,16 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
     {
         return FALSE;
     }
+
+#ifdef STARTUPSPEED
+    LARGE_INTEGER qpcEnd;
+    QueryPerformanceCounter(&qpcEnd);
+
+    double startupMs = (double)(qpcEnd.QuadPart - qpcStart.QuadPart) * 1000.0 / (double)qpcFreq.QuadPart;
+
+    std::wstring title = L"mIDE (Ready in " + std::to_wstring(startupMs).substr(0, 4) + L" ms)";
+    SetWindowTextW(hWnd, title.c_str());
+#endif
 
     ShowWindow(hWnd, nCmdShow);
     UpdateWindow(hWnd);

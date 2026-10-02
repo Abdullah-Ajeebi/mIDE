@@ -84,15 +84,27 @@ namespace
 			std::map<std::wstring, int> labelLines;
 			while (std::getline(input, line))
 			{
-				if (line.rfind(L"__label ", 0) == 0)
-				{
-					labelLines[line.substr(8)] = static_cast<int>(lines.size());
-					continue;
-				}
 				lines.push_back(line);
 			}
 
-			for (std::wstring& outputLine : lines)
+			if (optimize_)
+			{
+				lines = OptimizeMlog(lines);
+				lines = EliminateDeadStores(lines);
+			}
+
+			std::vector<std::wstring> resolvedLines;
+			for (const std::wstring& outputLine : lines)
+			{
+				if (outputLine.rfind(L"__label ", 0) == 0)
+				{
+					labelLines[outputLine.substr(8)] = static_cast<int>(resolvedLines.size());
+					continue;
+				}
+				resolvedLines.push_back(outputLine);
+			}
+
+			for (std::wstring& outputLine : resolvedLines)
 			{
 				for (const auto& label : labelLines)
 				{
@@ -104,7 +116,7 @@ namespace
 			}
 
 			std::wostringstream resolved;
-			for (const std::wstring& outputLine : lines)
+			for (const std::wstring& outputLine : resolvedLines)
 				resolved << outputLine << L"\n";
 			return resolved.str();
 		}

@@ -27,7 +27,6 @@
 #define IDC_TIMEOUT                     1004
 #define IDC_TEST_CONNECT                1005
 #define IDC_SPEED                       1006
-#define IDC_TAB1                        1007
 #define IDC_SETTINGSTABBER              1007
 #define IDC_COMPILER_OPTIMIZE           1008
 #define IDC_LINTER_ENABLE              1009

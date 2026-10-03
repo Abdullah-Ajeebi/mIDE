@@ -21,7 +21,7 @@
 
 #define MAX_LOADSTRING 100
 
-//#define STARTUPSPEED
+#define STARTUPSPEED
 
 // --- TCP CLIENT CLASS ---
 class MideDebuggerClient {
@@ -160,6 +160,38 @@ struct AppSettings {
     int cmixBlockSize = 64;
 };
 static AppSettings g_settings;
+
+static std::wstring LoadEmbeddedCompilerSample(HINSTANCE hInstance)
+{
+    HRSRC resource = FindResourceW(
+        hInstance,
+        MAKEINTRESOURCEW(IDR_COMPILER_SAMPLE),
+        RT_RCDATA);
+    if (!resource)
+        return {};
+
+    HGLOBAL loaded = LoadResource(hInstance, resource);
+    const DWORD size = SizeofResource(hInstance, resource);
+    if (!loaded || size == 0)
+        return {};
+
+    const char* bytes = static_cast<const char*>(LockResource(loaded));
+    if (!bytes)
+        return {};
+
+    const int required = MultiByteToWideChar(
+        CP_UTF8, MB_ERR_INVALID_CHARS, bytes, static_cast<int>(size), nullptr, 0);
+    if (required <= 0)
+        return {};
+
+    std::wstring sample(required, L'\0');
+    if (MultiByteToWideChar(
+        CP_UTF8, MB_ERR_INVALID_CHARS, bytes, static_cast<int>(size),
+        sample.data(), required) != required)
+        return {};
+
+    return sample;
+}
 
 static std::wstring SettingsFilePath()
 {
@@ -704,6 +736,28 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 auto* pResult = new CompileResult(result);
                 PostMessageW(hWnd, WM_APP_COMPILE_DONE, reinterpret_cast<WPARAM>(pResult), 0);
                 }).detach();
+            break;
+        }
+        case IDM_LOAD_SAMPLE:
+        {
+            const std::wstring sample = LoadEmbeddedCompilerSample(hInst);
+            if (sample.empty())
+            {
+                MessageBoxW(hWnd, L"Could not load the embedded compiler sample.",
+                    L"Load Sample", MB_OK | MB_ICONERROR);
+                break;
+            }
+
+            editor->SetText(sample);
+            if ((GetKeyState(VK_SHIFT) & 0x8000) != 0)
+            {
+                compiledEditor->SetText(L"Sample loaded. Compiling and optimizing in background...\r\n");
+                PostMessageW(hWnd, WM_COMMAND, MAKEWPARAM(IDM_COMPILE, 0), 0);
+            }
+            else
+            {
+                compiledEditor->SetText(L"Sample loaded. Press Compile to generate mlog.\r\n");
+            }
             break;
         }
         case IDM_DEBUG:

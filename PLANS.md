@@ -18,6 +18,8 @@ these features are planned for future compiler support.
   represented by mlog.
 - `const` declarations are accepted and reassignment is rejected.
 - `true` and `false` compile as `1` and `0`.
+- `if`/`else`, `while`, and `for` control flow are lowered to mlog jumps.
+- `break` and `continue` are supported inside loops.
 
 ## Deferred
 
@@ -29,9 +31,8 @@ these features are planned for future compiler support.
   type table rather than the current scalar declaration model.
 - Pointers, arrays, address-of, dereference, and `NULL`: require addressable
   storage and pointer representation.
-- `if`, `else`, `switch`, `case`, `default`, `while`, `do`, `for`, `break`,
-  `continue`, and `goto`: require structured control-flow lowering and branch
-  analysis.
+- `switch`, `case`, `default`, `do`, and `goto`: require additional structured
+  control-flow lowering and branch analysis.
 - `static` local lifetime and `extern` linkage: acceptance is currently
   syntactic only and does not provide those C linkage guarantees.
 - `volatile`, atomics, threads, and signal-related keywords: mlog has no

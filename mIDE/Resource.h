@@ -16,6 +16,7 @@
 #define IDD_CMIX                        129
 #define IDB_EMBEDDED_PIC                130
 #define IDD_SETTINGS                    131
+#define IDR_COMPILER_SAMPLE             132
 #define IDD_SETTINGS_NETWORK            140
 #define IDD_SETTINGS_DEBUG              141
 #define IDD_SETTINGS_COMPILER           143
@@ -29,17 +30,18 @@
 #define IDC_SPEED                       1006
 #define IDC_SETTINGSTABBER              1007
 #define IDC_COMPILER_OPTIMIZE           1008
-#define IDC_LINTER_ENABLE              1009
+#define IDC_LINTER_ENABLE               1009
 #define IDC_LINTER_WARNINGS             1010
-#define IDC_CMIX_PROFILE               1011
-#define IDC_CMIX_BLOCK_SIZE            1012
-#define IDC_CMIX_TEST                  1013
+#define IDC_CMIX_PROFILE                1011
+#define IDC_CMIX_BLOCK_SIZE             1012
+#define IDC_CMIX_TEST                   1013
 #define ID_FILE_CO                      32771
 #define ID_DEBUG_DEBUGINMINDUSTRY       32772
 #define IDM_DEBUG                       32773
 #define IDM_CMPCMIX                     32774
 #define IDM_SETTINGS                    32775
 #define ID_FILE_SETTINGS                32776
+#define IDM_LOAD_SAMPLE                 32777
 #define IDC_STATIC                      -1
 
 // Next default values for new objects
@@ -47,8 +49,8 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
-#define _APS_NEXT_RESOURCE_VALUE        132
-#define _APS_NEXT_COMMAND_VALUE         32777
+#define _APS_NEXT_RESOURCE_VALUE        133
+#define _APS_NEXT_COMMAND_VALUE         32778
 #define _APS_NEXT_CONTROL_VALUE         1008
 #define _APS_NEXT_SYMED_VALUE           110
 #endif

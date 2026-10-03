@@ -91,6 +91,37 @@ bool CustomMenuBar::LoadFromResource(HINSTANCE hInstance, LPCWSTR lpMenuName)
     return !m_items.empty();
 }
 
+bool CustomMenuBar::AppendMenuItem(
+    const std::wstring& parentLabel, UINT commandId, const std::wstring& label)
+{
+    if (!m_hLoadedRootMenu)
+        return false;
+
+    const int count = GetMenuItemCount(m_hLoadedRootMenu);
+    for (int i = 0; i < count; ++i)
+    {
+        wchar_t labelBuffer[256] = {};
+        MENUITEMINFOW mii = { sizeof(mii) };
+        mii.fMask = MIIM_STRING | MIIM_SUBMENU;
+        mii.dwTypeData = labelBuffer;
+        mii.cch = ARRAYSIZE(labelBuffer) - 1;
+        if (!GetMenuItemInfoW(m_hLoadedRootMenu, i, TRUE, &mii) || !mii.hSubMenu)
+            continue;
+
+        std::wstring cleanLabel;
+        for (size_t k = 0; k < wcslen(labelBuffer); ++k)
+        {
+            if (labelBuffer[k] != L'&')
+                cleanLabel += labelBuffer[k];
+        }
+
+        if (cleanLabel == parentLabel)
+            return AppendMenuW(mii.hSubMenu, MF_STRING, commandId, label.c_str()) != FALSE;
+    }
+
+    return false;
+}
+
 void CustomMenuBar::DrawInline(HTHEME hTheme, HDC hdcPaint, int startX, int startY, int height,
     HFONT hFont, bool isFocused, COLORREF textColor)
 {

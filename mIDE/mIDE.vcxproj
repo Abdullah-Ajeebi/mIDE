@@ -215,6 +215,7 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="mIDE.rc" />
+    <ResourceCompile Include="CompilerSample.rc" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="mIDE.ico" />

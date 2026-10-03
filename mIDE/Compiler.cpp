@@ -9,7 +9,7 @@
 
 namespace
 {
-	enum class TokenKind { End, Identifier, Number, String, Int, Const, Qualifier, Return, Plus, Minus, Star, Slash, Assign, Semicolon, Comma, LParen, RParen, LBrace, RBrace, Less, LessEqual, Greater, GreaterEqual, Equal, NotEqual };
+	enum class TokenKind { End, Identifier, Number, String, Int, Const, Qualifier, Return, If, Else, While, For, Break, Continue, Plus, Minus, Star, Slash, Assign, Semicolon, Comma, LParen, RParen, LBrace, RBrace, Less, LessEqual, Greater, GreaterEqual, Equal, NotEqual };
 
 	struct Token
 	{
@@ -64,12 +64,20 @@ namespace
 		};
 		std::map<std::wstring, Function> functions_;
 		size_t temporary_ = 0;
+		size_t label_ = 0;
 		bool parsingMain_ = false;
 		bool parsingBuiltinCall_ = false;
+		std::vector<std::wstring> breakLabels_;
+		std::vector<std::wstring> continueLabels_;
 
 		std::wstring NewTemporary()
 		{
 			return L"__t" + std::to_wstring(temporary_++);
+		}
+
+		std::wstring NewLabel(const wchar_t* prefix)
+		{
+			return L"__" + std::wstring(prefix) + std::to_wstring(label_++);
 		}
 
 		void Emit(const std::wstring& line)
@@ -165,6 +173,12 @@ namespace
 				else if (text == L"false")
 					current_ = { TokenKind::Number, L"0", line_ };
 				else if (text == L"return") current_ = { TokenKind::Return, text, line_ };
+				else if (text == L"if") current_ = { TokenKind::If, text, line_ };
+				else if (text == L"else") current_ = { TokenKind::Else, text, line_ };
+				else if (text == L"while") current_ = { TokenKind::While, text, line_ };
+				else if (text == L"for") current_ = { TokenKind::For, text, line_ };
+				else if (text == L"break") current_ = { TokenKind::Break, text, line_ };
+				else if (text == L"continue") current_ = { TokenKind::Continue, text, line_ };
 				else current_ = { TokenKind::Identifier, text, line_ };
 				return;
 			}
@@ -375,8 +389,139 @@ namespace
 			parsingMain_ = false;
 		}
 
-		void ParseStatement()
+		void ParseControlledBody()
 		{
+			if (current_.kind == TokenKind::LBrace)
+			{
+				Next();
+				while (current_.kind != TokenKind::RBrace && current_.kind != TokenKind::End)
+					ParseStatement();
+				Expect(TokenKind::RBrace, L"expected '}'");
+				return;
+			}
+			ParseStatement();
+		}
+
+		void ParseIf()
+		{
+			Next();
+			Expect(TokenKind::LParen, L"expected '(' after 'if'");
+			std::wstring condition = ParseExpression();
+			Expect(TokenKind::RParen, L"expected ')' after condition");
+
+			const std::wstring elseLabel = NewLabel(L"else");
+			const std::wstring endLabel = NewLabel(L"endif");
+			Emit(L"jump @" + elseLabel + L" equal " + condition + L" 0");
+			knownConstants_.clear();
+			ParseControlledBody();
+
+			if (current_.kind == TokenKind::Else)
+			{
+				Emit(L"jump @" + endLabel + L" always");
+				Emit(L"__label " + elseLabel);
+				Next();
+				ParseControlledBody();
+			}
+			else
+			{
+				Emit(L"__label " + elseLabel);
+			}
+			Emit(L"__label " + endLabel);
+			knownConstants_.clear();
+		}
+
+		void ParseWhile()
+		{
+			Next();
+			Expect(TokenKind::LParen, L"expected '(' after 'while'");
+			const std::wstring startLabel = NewLabel(L"while");
+			const std::wstring endLabel = NewLabel(L"endwhile");
+			Emit(L"__label " + startLabel);
+			knownConstants_.clear();
+			std::wstring condition = ParseExpression();
+			Expect(TokenKind::RParen, L"expected ')' after condition");
+			Emit(L"jump @" + endLabel + L" equal " + condition + L" 0");
+
+			breakLabels_.push_back(endLabel);
+			continueLabels_.push_back(startLabel);
+			ParseControlledBody();
+			continueLabels_.pop_back();
+			breakLabels_.pop_back();
+
+			Emit(L"jump @" + startLabel + L" always");
+			Emit(L"__label " + endLabel);
+			knownConstants_.clear();
+		}
+
+		void ParseFor()
+		{
+			Next();
+			Expect(TokenKind::LParen, L"expected '(' after 'for'");
+			if (current_.kind != TokenKind::Semicolon)
+				ParseStatement();
+			else
+				Next();
+
+			const std::wstring startLabel = NewLabel(L"for");
+			const std::wstring incrementLabel = NewLabel(L"forinc");
+			const std::wstring endLabel = NewLabel(L"endfor");
+			Emit(L"__label " + startLabel);
+			knownConstants_.clear();
+
+			if (current_.kind != TokenKind::Semicolon)
+			{
+				std::wstring condition = ParseExpression();
+				Emit(L"jump @" + endLabel + L" equal " + condition + L" 0");
+			}
+			Expect(TokenKind::Semicolon, L"expected ';' in 'for'");
+
+			std::wstring increment;
+			if (current_.kind != TokenKind::RParen)
+			{
+				std::wostringstream savedOutput;
+				savedOutput.swap(output_);
+				knownConstants_.clear();
+				ParseStatement(false);
+				increment = output_.str();
+				output_.swap(savedOutput);
+			}
+			Expect(TokenKind::RParen, L"expected ')' after 'for'");
+
+			breakLabels_.push_back(endLabel);
+			continueLabels_.push_back(incrementLabel);
+			knownConstants_.clear();
+			ParseControlledBody();
+			continueLabels_.pop_back();
+			breakLabels_.pop_back();
+
+			Emit(L"__label " + incrementLabel);
+			output_ << increment;
+			Emit(L"jump @" + startLabel + L" always");
+			Emit(L"__label " + endLabel);
+			knownConstants_.clear();
+		}
+
+		void ParseStatement(bool requireSemicolon = true)
+		{
+			if (current_.kind == TokenKind::If) { ParseIf(); return; }
+			if (current_.kind == TokenKind::While) { ParseWhile(); return; }
+			if (current_.kind == TokenKind::For) { ParseFor(); return; }
+			if (current_.kind == TokenKind::Break)
+			{
+				if (breakLabels_.empty()) Fail(L"'break' is only valid inside a loop");
+				Next();
+				Expect(TokenKind::Semicolon, L"expected ';' after 'break'");
+				Emit(L"jump @" + breakLabels_.back() + L" always");
+				return;
+			}
+			if (current_.kind == TokenKind::Continue)
+			{
+				if (continueLabels_.empty()) Fail(L"'continue' is only valid inside a loop");
+				Next();
+				Expect(TokenKind::Semicolon, L"expected ';' after 'continue'");
+				Emit(L"jump @" + continueLabels_.back() + L" always");
+				return;
+			}
 			if (current_.kind == TokenKind::Int || current_.kind == TokenKind::Const ||
 				current_.kind == TokenKind::Qualifier)
 			{
@@ -387,7 +532,8 @@ namespace
 				if (!variables_.insert({ name, true }).second) Fail(L"variable already declared: " + name);
 				constVariables_[name] = isConst;
 				Expect(TokenKind::Assign, L"expected '=' after variable name");
-				std::wstring value = ParseExpression(); Expect(TokenKind::Semicolon, L"expected ';'");
+				std::wstring value = ParseExpression();
+				if (requireSemicolon) Expect(TokenKind::Semicolon, L"expected ';'");
 				Emit(L"set " + name + L" " + value);
 				if (optimize_ && IsOptimizerInteger(value))
 					knownConstants_[name] = value;
@@ -398,7 +544,8 @@ namespace
 			if (current_.kind == TokenKind::Return)
 			{
 				Next();
-				std::wstring value = ParseExpression(); Expect(TokenKind::Semicolon, L"expected ';'");
+				std::wstring value = ParseExpression();
+				if (requireSemicolon) Expect(TokenKind::Semicolon, L"expected ';'");
 				Emit(L"set __return " + value);
 				if (!parsingMain_)
 					Emit(L"set @counter __return_pc");
@@ -413,13 +560,14 @@ namespace
 					if (function == functions_.end())
 						Fail(L"unknown function: " + name);
 					ParseCall(name, function->second);
-					Expect(TokenKind::Semicolon, L"expected ';'");
+					if (requireSemicolon) Expect(TokenKind::Semicolon, L"expected ';'");
 					return;
 				}
 				if (!variables_.count(name)) Fail(L"unknown variable: " + name);
 				if (constVariables_[name]) Fail(L"cannot assign to const variable: " + name);
 				Expect(TokenKind::Assign, L"expected '='");
-				std::wstring value = ParseExpression(); Expect(TokenKind::Semicolon, L"expected ';'");
+				std::wstring value = ParseExpression();
+				if (requireSemicolon) Expect(TokenKind::Semicolon, L"expected ';'");
 				Emit(L"set " + ResolveVariable(name) + L" " + value);
 				if (optimize_ && IsOptimizerInteger(value))
 					knownConstants_[name] = value;

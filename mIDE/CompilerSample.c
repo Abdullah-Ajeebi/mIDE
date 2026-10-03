@@ -1,7 +1,7 @@
 // mIDE compiler feature sample.
 // This demonstrates the currently supported C-like subset:
 // functions, scalar type spellings, qualifiers, const, booleans, comparisons,
-// arithmetic optimization, and Mindustry built-ins.
+// conditionals, loops, arithmetic optimization, and Mindustry built-ins.
 
 inline int square(const int value) {
 	return value * value;
@@ -35,6 +35,22 @@ int main() {
 	int score = square(offset) + weighted(smallValue, 5);
 	score = score + folded;
 	score = score + enabled;
+
+	int counter = 0;
+	while (counter < 3) {
+		score = score + counter;
+		counter = counter + 1;
+	}
+
+	for (int index = 0; index < 2; index = index + 1) {
+		score = score + index;
+	}
+
+	if (score > 0) {
+		score = score + 1;
+	} else {
+		score = score - 1;
+	}
 
 	print("score");
 	print(score);

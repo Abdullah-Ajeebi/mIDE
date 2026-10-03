@@ -21,6 +21,8 @@ public:
 
     // Accepts string resource names OR MAKEINTRESOURCEW(...)
     bool LoadFromResource(HINSTANCE hInstance, LPCWSTR lpMenuName);
+    bool AppendMenuItem(const std::wstring& parentLabel, UINT commandId,
+        const std::wstring& label);
 
     // Inline helper overload if you pass a raw integer ID like IDR_MAINMENU:
     bool LoadFromResource(HINSTANCE hInstance, UINT uMenuResId) {

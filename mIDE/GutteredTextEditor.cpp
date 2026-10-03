@@ -32,6 +32,12 @@ static const std::set<std::wstring> g_TypeKeywords = {
     L"true", L"false"
 };
 
+static const std::set<std::wstring> g_DeclarationKeywords = {
+    L"int", L"void", L"char", L"short", L"long", L"signed", L"unsigned",
+    L"bool", L"_Bool", L"INT_PTR", L"double", L"float", L"const",
+    L"static", L"extern", L"auto", L"register", L"inline", L"restrict"
+};
+
 
 static const std::set<std::wstring> g_ControlKeywords = {
     L"return", L"if", L"else", L"while", L"for", L"break", L"continue"
@@ -238,14 +244,23 @@ public:
                     std::wstring word(&text[start], scanPos - start);
 
                     
-                    if (g_TypeKeywords.count(word))
+                    if (g_DeclarationKeywords.count(word))
                     {
-                        while (scanPos < charCount && iswspace(text[scanPos])) scanPos++;
-                        if (scanPos < charCount && (iswalpha(text[scanPos]) || text[scanPos] == L'_'))
+                        while (scanPos < charCount)
                         {
+                            while (scanPos < charCount && iswspace(text[scanPos])) scanPos++;
+                            if (scanPos >= charCount ||
+                                (!iswalpha(text[scanPos]) && text[scanPos] != L'_'))
+                                break;
+
                             int idStart = scanPos;
-                            while (scanPos < charCount && (iswalnum(text[scanPos]) || text[scanPos] == L'_')) scanPos++;
+                            while (scanPos < charCount &&
+                                (iswalnum(text[scanPos]) || text[scanPos] == L'_'))
+                                scanPos++;
                             std::wstring idName(&text[idStart], scanPos - idStart);
+
+                            if (g_DeclarationKeywords.count(idName))
+                                continue;
 
                             int peek = scanPos;
                             while (peek < charCount && iswspace(text[peek])) peek++;
@@ -253,6 +268,7 @@ public:
                                 knownFunctions_.insert(idName); 
                             else
                                 knownVariables_.insert(idName); 
+                            break;
                         }
                     }
                     continue;

@@ -8,6 +8,7 @@ mIDE is a Windows desktop IDE for writing C-like source code and compiling it in
 - Split-pane editor layout with source and generated output
 - Dark mode UI and custom window chrome
 - Compiler optimization controls
+- Conditional and loop control flow
 - Linting and warnings support
 - Debug connection to a Mindustry daemon or local server
 - Example C source for compiler stress testing

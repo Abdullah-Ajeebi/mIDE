@@ -21,7 +21,7 @@
 
 #define MAX_LOADSTRING 100
 
-#define STARTUPSPEED
+//#define STARTUPSPEED
 
 // --- TCP CLIENT CLASS ---
 class MideDebuggerClient {

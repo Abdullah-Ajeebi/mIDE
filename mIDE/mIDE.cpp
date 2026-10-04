@@ -21,6 +21,10 @@
 
 #define MAX_LOADSTRING 100
 
+#ifndef MIDE_BUILD_NUMBER
+#define MIDE_BUILD_NUMBER 0
+#endif
+
 //#define STARTUPSPEED
 
 // --- TCP CLIENT CLASS ---
@@ -424,6 +428,40 @@ void PaintCustomCaption(HWND hWnd, HDC hdc)
             g_isWindowActive,
             options.crText
         );
+
+        const std::wstring buildLabel = L"B" + std::to_wstring(MIDE_BUILD_NUMBER);
+        SIZE szBuild = {};
+        GetTextExtentPoint32W(
+            hdcPaint,
+            buildLabel.c_str(),
+            static_cast<int>(buildLabel.size()),
+            &szBuild);
+
+        RECT buildRect = rcClient;
+        buildRect.top += (IsZoomed(hWnd) ? 8 : 0);
+        buildRect.right -= captionButtonWidth + 8;
+        buildRect.left = max(titleRect.left, buildRect.right - szBuild.cx);
+        buildRect.bottom -= height - (captionButtonHeight - (IsZoomed(hWnd) ? 8 : 0));
+
+        if (useDrawTextW)
+        {
+            SetBkColor(hdcPaint, bgColor);
+            SetBkMode(hdcPaint, TRANSPARENT);
+            SetTextColor(hdcPaint, options.crText);
+            DrawTextW(hdcPaint, buildLabel.c_str(), -1, &buildRect,
+                DT_RIGHT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+        }
+        else
+        {
+            DrawThemeTextEx(hTheme, hdcPaint,
+                WP_CAPTION,
+                g_isWindowActive ? CS_ACTIVE : CS_INACTIVE,
+                buildLabel.c_str(),
+                -1,
+                DT_RIGHT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS,
+                &buildRect,
+                &options);
+        }
 
         DWORD* pPixels = reinterpret_cast<DWORD*>(pixels);
         const int totalPixels = width * topBarHeight;

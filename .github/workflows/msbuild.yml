@@ -34,8 +34,10 @@ jobs:
         Write-Host "Current Commit Index / Build Number: $commits"
 
     - name: Build mIDE
+      env:
+        CL: "/DMIDE_BUILD_NUMBER=${{ env.COMMIT_INDEX }}"
       run: |
-        msbuild /m /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform=${{ env.BUILD_PLATFORM }} /p:CL_AdditionalOptions="/DMIDE_BUILD_NUMBER=${{ env.COMMIT_INDEX }}" mIDE/mIDE.vcxproj
+        msbuild /m /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform=${{ env.BUILD_PLATFORM }} mIDE/mIDE.vcxproj
 
     - name: Upload mIDE.exe Binary
       uses: actions/upload-artifact@v4

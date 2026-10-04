@@ -5,13 +5,14 @@ on:
     branches: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
+  workflow_dispatch:
 
 env:
   BUILD_CONFIGURATION: Release
   BUILD_PLATFORM: x64
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -20,19 +21,38 @@ jobs:
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 
 
     - name: Set up MSBuild
       uses: microsoft/setup-msbuild@v2
 
+    - name: Get Commit Index
+      run: |
+        $commits = git rev-list --count HEAD
+        echo "COMMIT_INDEX=$commits" >> $env:GITHUB_ENV
+        Write-Host "Current Commit Index / Build Number: $commits"
+
     - name: Build mIDE
       run: |
-        msbuild /m /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform=${{ env.BUILD_PLATFORM }} mIDE/mIDE.vcxproj
+        msbuild /m /p:Configuration=${{ env.BUILD_CONFIGURATION }} /p:Platform=${{ env.BUILD_PLATFORM }} /p:CL_AdditionalOptions="/DMIDE_BUILD_NUMBER=${{ env.COMMIT_INDEX }}" mIDE/mIDE.vcxproj
 
     - name: Upload mIDE.exe Binary
       uses: actions/upload-artifact@v4
       with:
-        name: mIDE-windows-x64
+        name: mIDE-b${{ env.COMMIT_INDEX }}
         path: |
           x64/Release/mIDE.exe
           mIDE/x64/Release/mIDE.exe
         if-no-files-found: warn
+
+    - name: Publish to GitHub Releases
+      if: github.event_name == 'push'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v1.0.${{ env.COMMIT_INDEX }}
+        name: "mIDE v1.0.${{ env.COMMIT_INDEX }}"
+        files: |
+          x64/Release/mIDE.exe
+          mIDE/x64/Release/mIDE.exe
+        generate_release_notes: true

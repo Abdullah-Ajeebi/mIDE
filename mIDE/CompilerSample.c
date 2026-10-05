@@ -3,6 +3,8 @@
 // functions, scalar type spellings, qualifiers, const, booleans, comparisons,
 // conditionals, loops, arithmetic optimization, and Mindustry built-ins.
 
+extern display display1;
+
 inline int square(const int value) {
 	return value * value;
 }
@@ -54,6 +56,7 @@ int main() {
 
 	print("score");
 	print(score);
+	drawflush(display1);
 	print(larger);
 	print(same);
 	print(ratio);

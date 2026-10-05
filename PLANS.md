@@ -18,6 +18,10 @@ these features are planned for future compiler support.
   represented by mlog.
 - `const` declarations are accepted and reassignment is rejected.
 - `true` and `false` compile as `1` and `0`.
+- Typed external device declarations such as `extern display display1;` and
+  `extern cell cell4;` are accepted without emitting initialization code.
+- Basic device type errors are reported for invalid display/cell usage, and a
+  bottom diagnostics pane shows compiler errors plus a warnings placeholder.
 - `if`/`else`, `while`, and `for` control flow are lowered to mlog jumps.
 - `break` and `continue` are supported inside loops.
 
@@ -33,7 +37,7 @@ these features are planned for future compiler support.
   storage and pointer representation.
 - `switch`, `case`, `default`, `do`, and `goto`: require additional structured
   control-flow lowering and branch analysis.
-- `static` local lifetime and `extern` linkage: acceptance is currently
-  syntactic only and does not provide those C linkage guarantees.
+- `static` local lifetime and general `extern` linkage: only external display
+  declarations are currently supported; C linkage guarantees are not modeled.
 - `volatile`, atomics, threads, and signal-related keywords: mlog has no
   equivalent memory-ordering or asynchronous execution model.

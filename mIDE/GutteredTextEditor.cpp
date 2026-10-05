@@ -29,13 +29,15 @@ static const std::set<std::wstring> g_TypeKeywords = {
     L"int", L"void", L"char", L"short", L"long", L"signed", L"unsigned",
     L"bool", L"_Bool", L"INT_PTR", L"double", L"float", L"const",
     L"static", L"extern", L"auto", L"register", L"inline", L"restrict",
+    L"display", L"cell", L"memory", L"message", L"switch", L"processor",
     L"true", L"false"
 };
 
 static const std::set<std::wstring> g_DeclarationKeywords = {
     L"int", L"void", L"char", L"short", L"long", L"signed", L"unsigned",
     L"bool", L"_Bool", L"INT_PTR", L"double", L"float", L"const",
-    L"static", L"extern", L"auto", L"register", L"inline", L"restrict"
+    L"static", L"extern", L"auto", L"register", L"inline", L"restrict",
+    L"display", L"cell", L"memory", L"message", L"switch", L"processor"
 };
 
 
@@ -58,6 +60,7 @@ static const std::vector<std::wstring> g_AllAutocompleteKeywords = {
     L"int", L"return", L"void", L"char", L"short", L"long", L"signed", L"unsigned",
     L"bool", L"_Bool", L"INT_PTR", L"double", L"float", L"const",
     L"static", L"extern", L"auto", L"register", L"inline", L"restrict",
+    L"display", L"cell", L"memory", L"message", L"switch", L"processor",
     L"true", L"false",
     L"if", L"else", L"while", L"for", L"break", L"continue",
     L"hyper", L"micro", L"logic",

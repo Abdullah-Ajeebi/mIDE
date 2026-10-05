@@ -47,7 +47,6 @@ OPCODE_MAP = {
     "TakeItemsI": "takeitems"
 }
 
-# Parameters that mean "This function returns a value instead of void"
 OUTPUT_PARAM_NAMES = {"output", "dest", "to", "result", "outx", "outy", "outfound", "outbuild"}
 
 def fetch_source():
@@ -63,7 +62,6 @@ def fetch_source():
             return f.read()
 
 def parse_instructions(java_code):
-    # Match: public static class [Name]I implements LInstruction { ... }
     class_pattern = re.compile(
         r"public\s+static\s+class\s+(\w+I)\s+implements\s+LInstruction\s*\{(.*?)(?=\n\s*public\s+static\s+class|\n\s*//endregion|\Z)",
         re.DOTALL
@@ -76,11 +74,10 @@ def parse_instructions(java_code):
         body = match.group(2)
 
         if class_name in ("NoopI", "JumpI", "OpI", "SetI"):
-            continue # Handled natively by compiler syntax (if/math/assignment)
+            continue
 
         c_name = OPCODE_MAP.get(class_name, class_name.lower().removesuffix("i"))
 
-        # Find parameterized constructor: public NameI(type param, type param2, ...)
         ctor_pattern = re.compile(rf"public\s+{class_name}\s*\((.*?)\)", re.DOTALL)
         ctor_match = ctor_pattern.search(body)
 
@@ -88,14 +85,12 @@ def parse_instructions(java_code):
         if ctor_match:
             raw_params = ctor_match.group(1).strip()
             if raw_params:
-                # Split comma-separated parameters
                 for p in raw_params.split(','):
                     parts = p.strip().split()
                     if len(parts) >= 2:
                         p_type, p_name = parts[-2], parts[-1]
                         params.append((p_name, p_type))
 
-        # Separate output/return parameters from input arguments
         input_args = []
         output_arg = None
 
@@ -116,7 +111,6 @@ def parse_instructions(java_code):
     return instructions
 
 def generate_cpp(instructions):
-    # 1. Register helper
     reg_lines = [
         "// Auto-generated built-in registrar",
         "template<typename T>",
@@ -128,7 +122,6 @@ def generate_cpp(instructions):
         reg_lines.append(f'    functions_.insert({{ L"{inst["c_name"]}", {{ {{ {args_str} }}, true, {ret_val} }} }});')
     reg_lines.append("}\n")
 
-    # 2. Emit helper function (returns true if handled)
     emit_lines = [
         "// Auto-generated instruction emitter",
         "template<typename TEmit, typename TNewTemp>",
@@ -157,7 +150,6 @@ def generate_cpp(instructions):
         emit_lines.append('    }')
     emit_lines.append("    return false;\n}")
 
-    # 3. CallTips map
     calltip_lines = [
         "// Auto-generated CallTips dictionary",
         "static const std::map<std::wstring, std::wstring> g_CallTipSignatures = {"
@@ -169,7 +161,6 @@ def generate_cpp(instructions):
         calltip_lines.append(f'    {{ L"{c_name}", L"{c_name}({sig_args}) -> {ret_type}" }},')
     calltip_lines.append("};\n")
 
-    # 4. Standard C Header (mindustry.h) - THE MISSING 4TH RETURN ITEM!
     header_lines = [
         "// --- Mindustry Standard Library Header (mindustry.h) ---",
         "#pragma once",

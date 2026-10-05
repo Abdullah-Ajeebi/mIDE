@@ -4,12 +4,13 @@
 
 #include <cwctype>
 #include <map>
+#include <set>
 #include <sstream>
 #include <vector>
 
 namespace
 {
-	enum class TokenKind { End, Identifier, Number, String, Int, Const, Qualifier, Return, If, Else, While, For, Break, Continue, Plus, Minus, Star, Slash, Assign, Semicolon, Comma, LParen, RParen, LBrace, RBrace, Less, LessEqual, Greater, GreaterEqual, Equal, NotEqual };
+	enum class TokenKind { End, Identifier, Number, String, Int, Const, Qualifier, Return, If, Else, While, For, Break, Continue, Plus, Minus, Star, Slash, Assign, Semicolon, Comma, LParen, RParen, LBrace, RBrace, LBracket, RBracket, Less, LessEqual, Greater, GreaterEqual, Equal, NotEqual };
 
 	struct Token
 	{
@@ -51,6 +52,7 @@ namespace
 		Token current_{ TokenKind::End, L"", 1 };
 		std::wostringstream output_;
 		std::map<std::wstring, bool> variables_;
+		std::map<std::wstring, std::wstring> externalTypes_;
 		std::map<std::wstring, bool> constVariables_;
 		std::map<std::wstring, std::wstring> variableNames_;
 		std::map<std::wstring, std::wstring> knownConstants_;
@@ -282,6 +284,7 @@ namespace
 			case L',': kind = TokenKind::Comma; break;
 			case L'(': kind = TokenKind::LParen; break; case L')': kind = TokenKind::RParen; break;
 			case L'{': kind = TokenKind::LBrace; break; case L'}': kind = TokenKind::RBrace; break;
+			case L'[': kind = TokenKind::LBracket; break; case L']': kind = TokenKind::RBracket; break;
 			default: Fail(L"unexpected character");
 			}
 			current_ = { kind, std::wstring(1, c), line_ };
@@ -299,6 +302,11 @@ namespace
 			Emit(L"jump @__fn_main always");
 			while (current_.kind != TokenKind::End)
 			{
+				if (current_.kind == TokenKind::Qualifier && current_.text == L"extern")
+				{
+					ParseExternDeclaration();
+					continue;
+				}
 				Function function = ParseFunctionHeader();
 				if (currentFunction_ == L"main")
 				{
@@ -375,6 +383,8 @@ namespace
 				variableNames_[parameter] = L"__arg_" + currentFunction_ + L"_" +
 					std::to_wstring(variableNames_.size());
 			}
+			for (const auto& external : externalTypes_)
+				variables_[external.first] = true;
 			for (size_t i = 0; i < function.parameters.size(); ++i)
 				constVariables_[function.parameters[i]] = function.constParameters[i];
 
@@ -501,8 +511,58 @@ namespace
 			knownConstants_.clear();
 		}
 
+		void ParseExternDeclaration()
+		{
+			if (current_.kind == TokenKind::Qualifier)
+				Next();
+
+			if (current_.kind != TokenKind::Identifier)
+			{
+				const std::wstring typeName = current_.text.empty()
+					? L"<missing>" : current_.text;
+				Fail(L"unsupported extern type: " + typeName);
+			}
+			const std::wstring typeName = current_.text;
+			Next();
+			static const std::set<std::wstring> supportedTypes = {
+				L"display", L"cell", L"memory", L"message", L"switch", L"processor"
+			};
+			if (!supportedTypes.count(typeName))
+				Fail(L"unsupported extern type: " + typeName);
+
+			if (current_.kind != TokenKind::Identifier)
+				Fail(L"expected external " + typeName + L" name");
+			const std::wstring name = current_.text;
+			Next();
+			if (!externalTypes_.insert({ name, typeName }).second)
+				Fail(L"external variable already declared: " + name);
+			Expect(TokenKind::Semicolon, L"expected ';' after extern declaration");
+			variables_[name] = true;
+		}
+
+		std::wstring ExternalTypeOf(const std::wstring& name) const
+		{
+			auto external = externalTypes_.find(name);
+			return external == externalTypes_.end() ? L"" : external->second;
+		}
+
+		[[noreturn]] void FailIndexedAccess(const std::wstring& name) const
+		{
+			const std::wstring type = ExternalTypeOf(name);
+			if (type == L"display")
+				Fail(L"cannot access specific index of " + name + L" (did you mean cell4?)");
+			if (type == L"cell")
+				Fail(L"cannot index memory cell " + name + L" as an array");
+			Fail(L"cannot index external " + type + L" " + name);
+		}
+
 		void ParseStatement(bool requireSemicolon = true)
 		{
+			if (current_.kind == TokenKind::Qualifier && current_.text == L"extern")
+			{
+				ParseExternDeclaration();
+				return;
+			}
 			if (current_.kind == TokenKind::If) { ParseIf(); return; }
 			if (current_.kind == TokenKind::While) { ParseWhile(); return; }
 			if (current_.kind == TokenKind::For) { ParseFor(); return; }
@@ -563,6 +623,13 @@ namespace
 					if (requireSemicolon) Expect(TokenKind::Semicolon, L"expected ';'");
 					return;
 				}
+				if (current_.kind == TokenKind::LBracket)
+				{
+					Next();
+					ParseExpression();
+					Expect(TokenKind::RBracket, L"expected ']'");
+					FailIndexedAccess(name);
+				}
 				if (!variables_.count(name)) Fail(L"unknown variable: " + name);
 				if (constVariables_[name]) Fail(L"cannot assign to const variable: " + name);
 				Expect(TokenKind::Assign, L"expected '='");
@@ -602,6 +669,15 @@ namespace
 
 			if (function.builtin)
 			{
+				if (name == L"drawflush" && !arguments.empty())
+				{
+					const std::wstring type = ExternalTypeOf(arguments[0]);
+					if (type != L"display" && type != L"large-display")
+					{
+						Fail(L"Function 'drawflush' expects a display target, but got " +
+							(type.empty() ? L"unknown" : type) + L" \"" + arguments[0] + L"\"");
+					}
+				}
 				std::wstring builtinResult;
 				if (TryEmitMindustryBuiltin(name, arguments,
 					[this](const std::wstring& line) { Emit(line); },
@@ -710,6 +786,13 @@ namespace
 				Next();
 				if (current_.kind != TokenKind::LParen)
 				{
+					if (current_.kind == TokenKind::LBracket)
+					{
+						Next();
+						ParseExpression();
+						Expect(TokenKind::RBracket, L"expected ']'");
+						FailIndexedAccess(name);
+					}
 					if (!variables_.count(name)) {
 						if (parsingBuiltinCall_)
 							return name;

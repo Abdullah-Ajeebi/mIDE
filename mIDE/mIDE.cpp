@@ -140,12 +140,14 @@ WCHAR szTitle[MAX_LOADSTRING];
 WCHAR szWindowClass[MAX_LOADSTRING];
 GutteredTextEditor* editor;
 GutteredTextEditor* compiledEditor;
+GutteredTextEditor* diagnosticsEditor;
 CustomMenuBar g_menuBar;
 static bool g_isWindowActive = true;
 static HWND g_splitter = nullptr;
 static int g_splitterX = 0;
 static bool g_draggingSplitter = false;
 constexpr int SPLITTER_WIDTH = 6;
+constexpr int DIAGNOSTICS_HEIGHT = 120;
 MideDebuggerClient* g_debuggerClient = nullptr;
 #ifdef STARTUPSPEED
 LARGE_INTEGER qpcFreq, qpcStart;
@@ -612,11 +614,12 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 
 void ResizeEditorPanes(HWND hWnd, int width, int height)
 {
-    if (!editor || !compiledEditor || !g_splitter)
+    if (!editor || !compiledEditor || !diagnosticsEditor || !g_splitter)
         return;
 
     const int top = TOPEXTENDWIDTH;
-    const int paneHeight = max(0, height - top);
+    const int diagnosticsHeight = min(DIAGNOSTICS_HEIGHT, max(80, height / 3));
+    const int paneHeight = max(0, height - top - diagnosticsHeight);
     const int maxSplitterX = max(120, width - 120 - SPLITTER_WIDTH);
     g_splitterX = max(120, min(g_splitterX, maxSplitterX));
 
@@ -624,6 +627,8 @@ void ResizeEditorPanes(HWND hWnd, int width, int height)
     MoveWindow(g_splitter, g_splitterX, top, SPLITTER_WIDTH, paneHeight, TRUE);
     MoveWindow(compiledEditor->GetHWND(), g_splitterX + SPLITTER_WIDTH, top,
         max(0, width - g_splitterX - SPLITTER_WIDTH), paneHeight, TRUE);
+    MoveWindow(diagnosticsEditor->GetHWND(), 0, top + paneHeight,
+        width, diagnosticsHeight, TRUE);
 }
 
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
@@ -633,6 +638,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
     editor = new GutteredTextEditor();
     compiledEditor = new GutteredTextEditor();
+    diagnosticsEditor = new GutteredTextEditor();
     g_menuBar.LoadFromResource(hInstance, MAKEINTRESOURCEW(IDC_MIDE));
 
     g_debuggerClient = new MideDebuggerClient();
@@ -724,7 +730,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         };
         DwmExtendFrameIntoClientArea(hWnd, &m);
         if (!editor->Create(hInst, hWnd, 0, 0, 800, 600) ||
-            !compiledEditor->Create(hInst, hWnd, 0, 0, 800, 600))
+            !compiledEditor->Create(hInst, hWnd, 0, 0, 800, 600) ||
+            !diagnosticsEditor->Create(hInst, hWnd, 0, 0, 800, 120))
         {
             MessageBox(hWnd, L"Failed to create editor panes", L"Error", MB_OK | MB_ICONERROR);
             return -1;
@@ -733,6 +740,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         compiledEditor->SetLintEnabled(false);
         compiledEditor->SetReadOnly(true);
         compiledEditor->SetText(L"Compiled mlog will appear here.");
+        diagnosticsEditor->SetLintEnabled(false);
+        diagnosticsEditor->SetReadOnly(true);
+        diagnosticsEditor->SetText(
+            L"Errors:\r\nNone\r\n\r\nWarnings:\r\nWarnings are not implemented yet.");
         g_splitter = CreateWindowExW(
             0, L"mIDESplitter", nullptr, WS_CHILD | WS_VISIBLE,
             0, 0, SPLITTER_WIDTH, 0, hWnd, nullptr, hInst, nullptr);
@@ -767,6 +778,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         {
             std::wstring sourceCode = editor->GetText();
             compiledEditor->SetText(L"Compiling and optimizing in background...\r\n");
+            diagnosticsEditor->SetText(
+                L"Errors:\r\nCompilation in progress...\r\n\r\nWarnings:\r\nNot implemented yet.");
 
                 const bool optimizerEnabled = g_settings.optimizerEnabled;
                 std::thread([hWnd, sourceCode, optimizerEnabled]() {
@@ -895,10 +908,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
         auto* pResult = reinterpret_cast<CompileResult*>(wParam);
         if (pResult->success)
+        {
             compiledEditor->SetText(pResult->output);
+            diagnosticsEditor->SetText(
+                L"Errors:\r\nNone\r\n\r\nWarnings:\r\nWarnings are not implemented yet.");
+        }
         else
+        {
             compiledEditor->SetText(L"Compilation error (line " +
                 std::to_wstring(pResult->errorLine) + L"):\r\n" + pResult->error);
+            diagnosticsEditor->SetText(
+                L"Errors:\r\nLine " + std::to_wstring(pResult->errorLine) +
+                L": " + pResult->error +
+                L"\r\n\r\nWarnings:\r\nWarnings are not implemented yet.");
+        }
 
         delete pResult;
         return 0;
@@ -915,6 +938,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         g_debuggerClient = nullptr;
         delete compiledEditor;
         compiledEditor = nullptr;
+        delete diagnosticsEditor;
+        diagnosticsEditor = nullptr;
         delete editor;
         editor = nullptr;
         PostQuitMessage(0);

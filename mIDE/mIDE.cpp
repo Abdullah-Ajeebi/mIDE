@@ -22,7 +22,11 @@
 #define MAX_LOADSTRING 100
 
 #ifndef MIDE_BUILD_NUMBER
-#define MIDE_BUILD_NUMBER 0
+#define MIDE_BUILD_LABEL L"Bd"
+#else
+#define WSTR_HELPER(x) L#x
+#define WSTR(x) WSTR_HELPER(x)
+#define MIDE_BUILD_LABEL L"B" WSTR(MIDE_BUILD_NUMBER)
 #endif
 
 //#define STARTUPSPEED
@@ -431,7 +435,7 @@ void PaintCustomCaption(HWND hWnd, HDC hdc)
             options.crText
         );
 
-        const std::wstring buildLabel = L"B" + std::to_wstring(MIDE_BUILD_NUMBER);
+        const std::wstring buildLabel = MIDE_BUILD_LABEL;
         SIZE szBuild = {};
         GetTextExtentPoint32W(
             hdcPaint,

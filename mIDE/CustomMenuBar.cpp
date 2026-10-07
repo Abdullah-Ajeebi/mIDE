@@ -123,7 +123,7 @@ bool CustomMenuBar::AppendMenuItem(
 }
 
 void CustomMenuBar::DrawInline(HTHEME hTheme, HDC hdcPaint, int startX, int startY, int height,
-    HFONT hFont, bool isFocused, COLORREF textColor)
+    HFONT hFont, bool isFocused, COLORREF textColor, bool useDrawTextW)
 {
     if (m_items.empty())
     {
@@ -135,9 +135,8 @@ void CustomMenuBar::DrawInline(HTHEME hTheme, HDC hdcPaint, int startX, int star
 
     HFONT oldFont = hFont ? (HFONT)SelectObject(hdcPaint, hFont) : nullptr;
 
-    extern DWORD g_buildNumber; // Access your existing build number global
-	extern bool g_darkModeEnabled; // Access your existing dark mode global
-    const bool useDrawTextW = (g_buildNumber >= 9200);
+    extern DWORD g_buildNumber;
+	extern bool g_darkModeEnabled;
 
     DTTOPTS opts = { sizeof(opts) };
     opts.dwFlags = DTT_COMPOSITED | DTT_TEXTCOLOR;

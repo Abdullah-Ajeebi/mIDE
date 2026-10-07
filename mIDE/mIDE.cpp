@@ -350,8 +350,8 @@ void PaintCustomCaption(HWND hWnd, HDC hdc)
     const int captionButtonWidth = g_buildNumber >= 10240
         ? 46 * 3 - 1
         : 50 + 25 + 25;
-    const int captionButtonHeight = 30 + (IsZoomed(hWnd) ? 8 : 0);
-    const int topBarHeight = captionButtonHeight - (IsZoomed(hWnd) ? 8 : 0);
+    const int captionButtonHeight = TOPEXTENDWIDTH - (IsZoomed(hWnd) ? 8 : 0);
+    const int topBarHeight = captionButtonHeight;
     BITMAPINFO dib = {};
     dib.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
     dib.bmiHeader.biWidth = width;
@@ -409,7 +409,7 @@ void PaintCustomCaption(HWND hWnd, HDC hdc)
         if (useDrawTextW)
         {
             SetBkColor(hdcPaint, bgColor);
-            SetBkMode(hdcPaint, TRANSPARENT);
+            SetBkMode(hdcPaint, OPAQUE);
             SetTextColor(hdcPaint, options.crText);
             DrawTextW(hdcPaint, title, -1, &titleRect,
                 DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
@@ -432,7 +432,8 @@ void PaintCustomCaption(HWND hWnd, HDC hdc)
             captionButtonHeight - 6,
             captionFont,
             g_isWindowActive,
-            options.crText
+            options.crText,
+            useDrawTextW
         );
 
         const std::wstring buildLabel = MIDE_BUILD_LABEL;
@@ -452,7 +453,7 @@ void PaintCustomCaption(HWND hWnd, HDC hdc)
         if (useDrawTextW)
         {
             SetBkColor(hdcPaint, bgColor);
-            SetBkMode(hdcPaint, TRANSPARENT);
+            SetBkMode(hdcPaint, OPAQUE);
             SetTextColor(hdcPaint, options.crText);
             DrawTextW(hdcPaint, buildLabel.c_str(), -1, &buildRect,
                 DT_RIGHT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
@@ -469,20 +470,23 @@ void PaintCustomCaption(HWND hWnd, HDC hdc)
                 &options);
         }
 
-        DWORD* pPixels = reinterpret_cast<DWORD*>(pixels);
-        const int totalPixels = width * topBarHeight;
 
-        for (int i = 0; i < totalPixels; ++i)
-        {
-            DWORD rgb = pPixels[i] & 0x00FFFFFF;
+        if (useDrawTextW) {
+            DWORD* pPixels = reinterpret_cast<DWORD*>(pixels);
+            const int totalPixels = width * topBarHeight;
 
-            if (rgb == 0x00000000 || rgb == bgColor)
+            for (int i = 0; i < totalPixels; ++i)
             {
-                pPixels[i] = 0xFF000000 | bgColor;
-            }
-            else
-            {
-                pPixels[i] |= 0xFF000000;
+                DWORD rgb = pPixels[i] & 0x00FFFFFF;
+
+                if (rgb == 0x00000000 || rgb == bgColor)
+                {
+                    pPixels[i] = 0xFF000000 | bgColor;
+                }
+                else
+                {
+                    pPixels[i] |= 0xFF000000;
+                }
             }
         }
 

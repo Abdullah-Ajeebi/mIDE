@@ -31,7 +31,7 @@ public:
 
     // 2. Draw directly into PaintCustomCaption's hdcPaint!
     void DrawInline(HTHEME hTheme, HDC hdcPaint, int startX, int startY, int height,
-        HFONT hFont, bool isFocused, COLORREF textColor);
+        HFONT hFont, bool isFocused, COLORREF textColor, bool useDrawTextW);
 
     // 3. Message Handlers
     int HitTest(POINT ptClient) const;

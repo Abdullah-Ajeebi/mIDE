@@ -338,13 +338,6 @@ void PaintCustomCaption(HWND hWnd, HDC hdc)
     if (!hTheme)
         return;
 
-    HDC hdcPaint = CreateCompatibleDC(hdc);
-    if (!hdcPaint)
-    {
-        CloseThemeData(hTheme);
-        return;
-    }
-
     const int width = rcClient.right - rcClient.left;
     const int height = rcClient.bottom - rcClient.top;
     const int captionButtonWidth = g_buildNumber >= 10240
@@ -352,22 +345,28 @@ void PaintCustomCaption(HWND hWnd, HDC hdc)
         : 50 + 25 + 25;
     const int captionButtonHeight = TOPEXTENDWIDTH - (IsZoomed(hWnd) ? 8 : 0);
     const int topBarHeight = captionButtonHeight;
-    BITMAPINFO dib = {};
-    dib.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    dib.bmiHeader.biWidth = width;
-    dib.bmiHeader.biHeight = -topBarHeight;
-    dib.bmiHeader.biPlanes = 1;
-    dib.bmiHeader.biBitCount = 32;
-    dib.bmiHeader.biCompression = BI_RGB;
 
-    void* pixels = nullptr;
-    HBITMAP hBitmap = CreateDIBSection(hdc, &dib, DIB_RGB_COLORS, &pixels, nullptr, 0);
-    if (hBitmap)
+    RECT rcPaint;
+    rcPaint.left = 0;
+    rcPaint.top = 1;
+    rcPaint.right = width - captionButtonWidth;
+    rcPaint.bottom = 1 + (topBarHeight - (IsZoomed(hWnd) ? -6 : 1));
+    BP_PAINTPARAMS params = { sizeof(params) };
+    params.dwFlags = BPPF_NOCLIP;
+    HDC hdcPaint = nullptr;
+    HPAINTBUFFER hBufferedPaint = BeginBufferedPaint(
+        hdc, &rcPaint, BPBF_TOPDOWNDIB, &params, &hdcPaint);
+
+    if (hBufferedPaint)
     {
         COLORREF bgColor = g_darkModeEnabled
             ? (g_isWindowActive ? RGB(0, 0, 0) : RGB(43, 43, 43))
             : RGB(255, 255, 255);
-        HBITMAP oldBitmap = (HBITMAP)SelectObject(hdcPaint, hBitmap);
+
+        HBRUSH hbrBg = CreateSolidBrush(bgColor);
+        FillRect(hdcPaint, &rcPaint, hbrBg);
+        DeleteObject(hbrBg);
+
         HICON smallIcon = (HICON)GetClassLongPtrW(hWnd, GCLP_HICONSM);
         if (smallIcon)
         {
@@ -400,10 +399,8 @@ void PaintCustomCaption(HWND hWnd, HDC hdc)
         titleRect.left += 29;
         titleRect.right -= captionButtonWidth + szTitle.cx;
         titleRect.bottom -= height - (captionButtonHeight - (IsZoomed(hWnd) ? 8 : 0));
-        if (titleRect.right < titleRect.left)
-            titleRect.right = titleRect.left;
-        if (titleRect.bottom < titleRect.top)
-            titleRect.bottom = titleRect.top;
+        if (titleRect.right < titleRect.left) titleRect.right = titleRect.left;
+        if (titleRect.bottom < titleRect.top) titleRect.bottom = titleRect.top;
         const bool useDrawTextW = (g_buildNumber >= 9200);
 
         if (useDrawTextW)
@@ -423,7 +420,6 @@ void PaintCustomCaption(HWND hWnd, HDC hdc)
         }
 
         int menuStartX = titleRect.left + szTitle.cx + 16;
-
         g_menuBar.DrawInline(
             hTheme,
             hdcPaint,
@@ -438,11 +434,7 @@ void PaintCustomCaption(HWND hWnd, HDC hdc)
 
         const std::wstring buildLabel = MIDE_BUILD_LABEL;
         SIZE szBuild = {};
-        GetTextExtentPoint32W(
-            hdcPaint,
-            buildLabel.c_str(),
-            static_cast<int>(buildLabel.size()),
-            &szBuild);
+        GetTextExtentPoint32W(hdcPaint, buildLabel.c_str(), static_cast<int>(buildLabel.size()), &szBuild);
 
         RECT buildRect = rcClient;
         buildRect.top += (IsZoomed(hWnd) ? 8 : 0);
@@ -463,43 +455,21 @@ void PaintCustomCaption(HWND hWnd, HDC hdc)
             DrawThemeTextEx(hTheme, hdcPaint,
                 WP_CAPTION,
                 g_isWindowActive ? CS_ACTIVE : CS_INACTIVE,
-                buildLabel.c_str(),
-                -1,
+                buildLabel.c_str(), -1,
                 DT_RIGHT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS,
-                &buildRect,
-                &options);
+                &buildRect, &options);
         }
 
-
-        if (useDrawTextW) {
-            DWORD* pPixels = reinterpret_cast<DWORD*>(pixels);
-            const int totalPixels = width * topBarHeight;
-
-            for (int i = 0; i < totalPixels; ++i)
-            {
-                DWORD rgb = pPixels[i] & 0x00FFFFFF;
-
-                if (rgb == 0x00000000 || rgb == bgColor)
-                {
-                    pPixels[i] = 0xFF000000 | bgColor;
-                }
-                else
-                {
-                    pPixels[i] |= 0xFF000000;
-                }
-            }
-        }
-
-        BitBlt(hdc, 0, 1, width - captionButtonWidth, topBarHeight - (IsZoomed(hWnd) ? -6 : 1), hdcPaint, 0, 0, SRCCOPY);
-        SelectObject(hdcPaint, oldBitmap);
         if (oldFont)
             SelectObject(hdcPaint, oldFont);
         if (captionFont)
             DeleteObject(captionFont);
-        DeleteObject(hBitmap);
+
+        BufferedPaintSetAlpha(hBufferedPaint, nullptr, 255);
+
+        EndBufferedPaint(hBufferedPaint, TRUE);
     }
 
-    DeleteDC(hdcPaint);
     CloseThemeData(hTheme);
 }
 
@@ -729,6 +699,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     }
     case WM_CREATE:
     {
+        BufferedPaintInit();
         ApplyDarkModeToWindow(hWnd);
         MARGINS m = {
             0,
@@ -942,6 +913,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         return 0;
     }
     case WM_DESTROY:
+        BufferedPaintUnInit();
         delete g_debuggerClient;
         g_debuggerClient = nullptr;
         delete compiledEditor;

@@ -343,14 +343,15 @@ void PaintCustomCaption(HWND hWnd, HDC hdc)
     const int captionButtonWidth = g_buildNumber >= 10240
         ? 46 * 3 - 1
         : 50 + 25 + 25;
-    const int captionButtonHeight = TOPEXTENDWIDTH - (IsZoomed(hWnd) ? 8 : 0);
+    const int offsetFactor = (IsZoomed(hWnd) ? 6 : 0);
+    const int captionButtonHeight = TOPEXTENDWIDTH + offsetFactor;
     const int topBarHeight = captionButtonHeight;
 
     RECT rcPaint;
     rcPaint.left = 0;
     rcPaint.top = 1;
     rcPaint.right = width - captionButtonWidth;
-    rcPaint.bottom = 1 + (topBarHeight - (IsZoomed(hWnd) ? -6 : 1));
+    rcPaint.bottom = topBarHeight;
     BP_PAINTPARAMS params = { sizeof(params) };
     params.dwFlags = BPPF_NOCLIP;
     HDC hdcPaint = nullptr;
@@ -371,7 +372,7 @@ void PaintCustomCaption(HWND hWnd, HDC hdc)
         if (smallIcon)
         {
             const int iconSize = GetSystemMetrics(SM_CXSMICON);
-            DrawIconEx(hdcPaint, 8, 7, smallIcon, iconSize, iconSize, 0, nullptr, DI_NORMAL);
+            DrawIconEx(hdcPaint, 8, 7 + offsetFactor / 2, smallIcon, iconSize, iconSize, 0, nullptr, DI_NORMAL);
         }
 
         LOGFONTW logFont = {};
